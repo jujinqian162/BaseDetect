@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 from unittest import TestCase, main, mock
 
@@ -100,10 +101,21 @@ class PredictCLISmoke(TestCase):
         with mock.patch.object(sys, "argv", argv):
             from scripts import predict as predict_module
 
-            predict_module.main()
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with mock.patch("scripts.predict.runs_dir", return_value=Path(tmpdir)):
+                    with self.assertLogs("scripts.predict", level="WARNING") as log_ctx:
+                        predict_module.main()
 
         mock_model.track.assert_called()
         capture_instance.release.assert_called_once()
+        self.assertTrue(
+            any("falling back" in entry.lower() for entry in log_ctx.output),
+            "Expected fallback warning missing from logs.",
+        )
+        self.assertTrue(
+            any("警告" in entry for entry in log_ctx.output),
+            "Expected bilingual warning missing from logs.",
+        )
 
 
 if __name__ == "__main__":

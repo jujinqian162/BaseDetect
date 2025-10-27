@@ -80,6 +80,7 @@ uv run scripts/predict.py [参数]
 - `--source`：输入源，既可以是 `test/test3.mp4` 等文件，也可以直接给摄像头索引。
 - `--output`：输出视频路径，默认 `artifacts/outputs/output.avi`。
 - `--conf / --device / --no-save / --show` 等参数与 Ultralytics CLI 用法一致，便于迁移。
+- 当 `--weights auto` 未找到最新训练权重时，会打印黄色的中英双语警告并回退到内置预训练模型，确保你了解当前使用的权重来源。
 
 常见用法：
 ```bash
@@ -97,7 +98,7 @@ uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --
 - 提交前请检查 `git status`，避免意外提交体积较大的数据或产物。
 
 ## 手动测试清单
-- `uv run scripts/predict.py`，检查 `artifacts/outputs/output.avi` 是否更新，确保视频帧内有检测框与轨迹。
+- `uv run scripts/predict.py`，检查 `artifacts/outputs/output.avi` 是否更新并包含检测框，同时仅在自动回退预训练权重时出现黄色中英双语警告。
 - 针对每个 `test/` 下的演示视频重复上述命令，确认兼容不同分辨率。
 - 训练逻辑调整后，记录 `artifacts/runs/<run_name>/results.csv` 最新指标；必要时截取 loss/precision 曲线附在 PR 中。
 - 若修改了 CLI 参数解析或路径逻辑，使用 `uv run scripts/test_cli.py` 做参数冒烟，并运行 `uv run --module basedetect` 确认演示数据仍可生成。

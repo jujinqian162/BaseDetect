@@ -83,6 +83,7 @@ uv run scripts/predict.py [options]
 - `--source` — video path or camera index (`test/test3.mp4` by default).
 - `--output` — annotated video destination (`artifacts/outputs/output.avi` by default).
 - `--device`, `--conf`, `--no-save`, `--show` — mirror the Ultralytics CLI options.
+- When `--weights auto` cannot find a freshly trained checkpoint, the script emits a yellow bilingual warning and falls back to the bundled pretrained model so you know which weights are in use.
 
 Common patterns:
 ```bash
@@ -100,7 +101,7 @@ uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --
 - Keep large assets (datasets, artifacts) out of commits—double-check `git status` before pushing.
 
 ## Manual Validation
-- `uv run scripts/predict.py` and confirm `artifacts/outputs/output.avi` updates and contains bounding boxes and tracks.
+- `uv run scripts/predict.py` and confirm `artifacts/outputs/output.avi` updates, contains detections, and prints a yellow bilingual warning only when auto-falling back to pretrained weights.
 - Repeat inference for each clip in `test/` to ensure different resolutions behave correctly.
 - After training changes, record fresh metrics from `artifacts/runs/<run_name>/results.csv`; grab loss/precision plots when useful for reviews.
 - Whenever CLI argument parsing or default paths change, run `uv run scripts/test_cli.py` for parameter smoke tests and `uv run --module basedetect` to confirm demo data still initializes correctly.
