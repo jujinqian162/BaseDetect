@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import logging
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -13,6 +14,35 @@ from ultralytics import YOLO
 
 from basedetect.datasets import ensure_demo_dataset
 from basedetect.paths import ensure_runtime_dirs, pretrained_dir, project_root, runs_dir
+
+
+LOGGER = logging.getLogger(__name__)
+YELLOW = "\033[33m"
+RESET = "\033[0m"
+
+
+def _is_pretrained(path_or_name: Path | str) -> bool:
+    if isinstance(path_or_name, Path):
+        try:
+            return path_or_name.resolve().is_relative_to(pretrained_dir().resolve())
+        except AttributeError:
+            try:
+                path_or_name.resolve().relative_to(pretrained_dir().resolve())
+                return True
+            except ValueError:
+                return False
+    candidate = Path(str(path_or_name)).name
+    return candidate.startswith("yolov")
+
+
+def warn_pretrained_usage(source: Path | str) -> None:
+    LOGGER.warning(
+        "%s⚠️ 警告：正在使用预训练权重 %s。\n⚠️ Warning: Training with pretrained weights %s.%s",
+        YELLOW,
+        source,
+        source,
+        RESET,
+    )
 
 
 DEFAULT_CONFIG = "configs/data-initial.yaml"
@@ -66,7 +96,15 @@ def main() -> None:
             raise FileNotFoundError(f"Dataset config not found: {config_path}")
 
     model_path = resolve_path(args.model)
-    model_source = str(model_path) if model_path.exists() else args.model
+    if model_path.exists():
+        model_source = str(model_path)
+        using_pretrained = _is_pretrained(model_path)
+    else:
+        model_source = args.model
+        using_pretrained = _is_pretrained(model_source)
+
+    if using_pretrained:
+        warn_pretrained_usage(model_source)
 
     device = args.device
     if device == "auto":

@@ -59,6 +59,7 @@ uv run scripts/train.py [options]
 - `--device` — Ultralytics device string; `auto` prefers the first GPU when CUDA is available.
 - `--project / --name` — overrides for the Ultralytics experiment directory (`artifacts/runs/basedetect` by default).
 - `--resume`, `--patience` — control checkpoint resumption and early stopping.
+- Whenever training falls back to a pretrained checkpoint (the default `yolov8n.pt` or another Ultralytics weight), the CLI emits a yellow bilingual warning so you know initial weights come from pretraining.
 
 Recommended habits:
 - After each run, capture metrics from `artifacts/runs/basedetect/results.csv` (mAP, precision, recall).

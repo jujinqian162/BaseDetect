@@ -57,6 +57,7 @@ uv run scripts/train.py [参数]
 - `--device`：传递给 YOLO 的设备字符串；在 `auto` 模式下优先使用首块 GPU。
 - `--project / --name`：实验输出位置，默认为 `artifacts/runs/basedetect`。
 - `--resume` 与 `--patience`：对应重训与早停策略。
+- 当 CLI 检测到使用预训练权重（默认 `yolov8n.pt` 或其他 Ultralytics 模型）时，会打印黄色的中英双语提示，提醒当前是从预训练权重启动。
 
 建议习惯：
 - 训练完成后记录 `artifacts/runs/basedetect/results.csv` 中的关键指标（mAP、precision、recall）。
