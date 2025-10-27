@@ -37,18 +37,18 @@ BaseDetect/
 
 ## 快速开始
 1. `uv sync` 安装依赖。
-2. `uv run --module basedetect` 生成 demo 数据集与目录结构。
-3. `uv run scripts/train.py` 使用演示集训练，确认 `artifacts/runs/basedetect/` 写出日志与 `weights/best.pt`。
+2. 确保 `configs/data-initial.yaml` 对应的数据集已准备完毕（参见“数据与配置管理”）。
+3. `uv run scripts/train.py` 使用 `configs/data-initial.yaml` 进行训练，确认 `artifacts/runs/basedetect/` 写出日志与 `weights/best.pt`。
 4. `uv run scripts/predict.py` 跑通 `test/test3.mp4`，验证在 `artifacts/outputs/output.avi` 生成带框视频。
 
-若要替换为 Roboflow 数据，只需将导出的 `train/valid/test` 拷贝到 `datasets/<dataset_name>/`，并在训练命令中传入相应的 `configs/*.yaml`。
+如果需要临时体验 demo 数据集，可运行 `uv run --module basedetect` 并在训练命令中添加 `--config auto`。
 
 ## 训练流程
 运行训练脚本：
 ```bash
 uv run scripts/train.py [参数]
 ```
-- `--config PATH`：数据集配置文件。默认 `auto` 会创建 `datasets/demo/data.yaml` 并使用生成的小型数据。
+- `--config PATH`：数据集配置文件。默认读取 `configs/data-initial.yaml`；传入 `auto` 会创建 `datasets/demo/data.yaml` 并使用生成的小型数据。
 - `--model SOURCE`：初始权重路径或 Ultralytics 模型名。默认读取 `weights/pretrained/yolov8n.pt`。
 - `--epochs / --batch / --imgsz`：常规超参，缺省值分别为 `10`、`8`、`640`。
 - `--device`：传递给 YOLO 的设备字符串；在 `auto` 模式下优先使用首块 GPU。
@@ -88,8 +88,8 @@ uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --
 ```
 
 ## 数据与配置管理
-- `configs/` 保存数据源与实验设置，`configs/data.yaml` 指向 Roboflow 项目 `robocon-ozkss/base-inspection-txwpc`。如需新增数据，只需复制模板并修改路径。
-- `datasets/` 下的目录建议命名为数据版本，如 `datasets/roboflow_v1/`；Roboflow 导出的 `train/valid/test` 直接放入该目录。
+- `configs/` 保存数据源与实验设置。`configs/data-initial.yaml` 是训练的默认配置；`configs/data.yaml` 指向 Roboflow 项目 `robocon-ozkss/base-inspection-txwpc`。如需新增数据，只需复制模板并修改路径。
+- 数据目录命名建议与配置保持一致，例如 `datasets-initial/`、`datasets/roboflow_v1/` 等，并在目录下放置 `train/valid/test` 子文件夹以匹配 YAML 声明。
 - 仓库已在 `.gitignore` 中排除 `datasets/` 与 `artifacts/`，提交前可快速执行 `git status` 确认未包含大文件。
 
 ## 手动测试清单

@@ -15,7 +15,7 @@ from basedetect.datasets import ensure_demo_dataset
 from basedetect.paths import ensure_runtime_dirs, pretrained_dir, project_root, runs_dir
 
 
-DEFAULT_CONFIG = "auto"
+DEFAULT_CONFIG = "configs/data-initial.yaml"
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--config",
         default=DEFAULT_CONFIG,
-        help="Path to the dataset YAML (use 'auto' to generate a synthetic demo dataset).",
+        help="Path to the dataset YAML (pass 'auto' to generate a synthetic demo dataset).",
     )
     parser.add_argument(
         "--model",

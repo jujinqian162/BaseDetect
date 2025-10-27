@@ -39,18 +39,18 @@ Code, configuration, raw data, and generated artifacts live in separate director
 
 ## Quickstart Checklist
 1. `uv sync` to install dependencies.
-2. `uv run --module basedetect` to create the demo dataset and required directories.
-3. `uv run scripts/train.py` to fine-tune on the demo data; confirm `artifacts/runs/basedetect/` contains logs and `weights/best.pt`.
+2. Ensure the dataset referenced by `configs/data-initial.yaml` is available (see Data & Configuration Management).
+3. `uv run scripts/train.py` to fine-tune using `configs/data-initial.yaml`; confirm `artifacts/runs/basedetect/` contains logs and `weights/best.pt`.
 4. `uv run scripts/predict.py` to process `test/test3.mp4` and produce `artifacts/outputs/output.avi`.
 
-To switch to the Roboflow dataset, drop the exported `train/`, `valid/`, and `test/` folders under `datasets/<name>/` and point the trainer at the matching `configs/*.yaml`.
+Need a lightweight demo dataset instead? Run `uv run --module basedetect` and launch training with `uv run scripts/train.py --config auto`.
 
 ## Training Workflow
 Run the training CLI:
 ```bash
 uv run scripts/train.py [options]
 ```
-- `--config PATH` — dataset YAML. The default `'auto'` builds a demo dataset at `datasets/demo/data.yaml`.
+- `--config PATH` — dataset YAML. Defaults to `configs/data-initial.yaml`; pass `'auto'` to build a demo dataset at `datasets/demo/data.yaml`.
 - `--model SOURCE` — initial weights (file path or Ultralytics model name). Defaults to `weights/pretrained/yolov8n.pt`.
 - `--epochs / --batch / --imgsz` — standard hyperparameters with defaults `10`, `8`, and `640`.
 - `--device` — Ultralytics device string; `auto` prefers the first GPU when CUDA is available.
@@ -91,8 +91,8 @@ uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --
 ```
 
 ## Data & Configuration Management
-- `configs/` stores dataset descriptors and experiment settings. `configs/data.yaml` points to the Roboflow project `robocon-ozkss/base-inspection-txwpc`. Copy it when creating new variants and adjust paths accordingly.
-- Organize Roboflow exports under descriptive directories such as `datasets/roboflow_v1/`. Place the `train/`, `valid/`, and `test/` folders directly inside.
+- `configs/` stores dataset descriptors and experiment settings. `configs/data-initial.yaml` is the default for training, while `configs/data.yaml` points to the Roboflow project `robocon-ozkss/base-inspection-txwpc`. Copy either when creating new variants and adjust paths accordingly.
+- Organize dataset exports under descriptive directories such as `datasets-initial/` or `datasets/roboflow_v1/`, matching the paths declared in each config. Place the `train/`, `valid/`, and `test/` folders directly inside.
 - `.gitignore` already excludes `datasets/` and `artifacts/`. Always review `git status` before committing to ensure large files stay local.
 
 ## Manual Validation
