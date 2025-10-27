@@ -1,112 +1,113 @@
 # BaseDetect 项目指南
 
-BaseDetect 利用 Ultralytics YOLOv8 在单色视频中检测与跟踪机床底座，仓库内同时包含训练脚本、推理脚本、权重与示例视频，可帮助你从 Roboflow 提供的数据中快速微调模型并验证效果。
+BaseDetect 针对机床底座检测与跟踪场景封装了基于 Ultralytics YOLOv8 的训练与推理流程。仓库内提供最小化数据集、脚本工具、预训练权重以及示例视频，帮助快速验证流程并在自有数据上迭代。
 
 ## 项目结构
 ```
 BaseDetect/
-├─ basedetect/             # Python 包，可通过 `python -m basedetect` 进行快速冒烟测试
+├─ basedetect/             # Python 包，可 `uv run --module basedetect` 快速冒烟
 ├─ scripts/                # 训练与推理脚本（train.py、predict.py）
-├─ configs/                # 数据集与其他配置文件（data.yaml）
-├─ datasets/               # Roboflow 导出的 train/valid/test 数据
-├─ test/                   # 演示/回归使用的视频片段
-├─ weights/pretrained/     # 预训练的 YOLO 权重缓存
-├─ artifacts/              # 训练日志、导出的可视化以及 `outputs/` 视频
-├─ AGENTS.md, README*.md   # 贡献者与项目文档
-└─ requirements.txt 等     # 依赖与工程元数据
+├─ configs/                # 数据/任务配置（data.yaml 等）
+├─ datasets/               # Roboflow 导出的 train/valid/test
+├─ test/                   # 演示或回归使用的视频片段
+├─ weights/pretrained/     # 预训练 YOLO 权重缓存
+├─ artifacts/              # 训练日志、推理输出、临时可视化
+├─ AGENTS.md, README*.md   # 项目文档
+└─ requirements.txt ...    # 依赖说明与工程元数据
 ```
-该结构将"代码"与"数据/产物"分开，便于清理工作区并避免误提交大型文件。
+代码与生成产物分开存放，便于清理工作目录，也能避免无意提交大型文件。
 
 ## 环境准备
-1. 安装 Python 3.9+ 和 CUDA（如需 GPU 训练）
-2. 推荐使用 [uv](https://github.com/astral-sh/uv)：
-   ```bash
-   uv sync
-   ```
-   或使用 venv + pip：
-   ```bash
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-3. 初始化目录并生成演示数据集：
-   ```bash
-   uv run python -m basedetect
-   ```
-4. 训练前确认 `nvidia-smi` 输出目标 GPU，并在需要时设置 `CUDA_VISIBLE_DEVICES`
-
-## 训练与评估
-默认使用自动生成的演示数据集，确保开箱即可运行：
-```bash
-uv run python scripts/train.py
-```
-- 如果存在训练历史，Ultralytics 工具会将结果写入 `artifacts/runs/basedetect/`（包含 `results.csv`、`weights/best.pt` 等）
-- 默认从 `yolov8n.pt` 微调，可通过 `--model` 更换
-- 切换到真实 Roboflow 数据集：
+- Python 版本：3.9 及以上；若需 GPU，请预装 CUDA 驱动并确认 `nvidia-smi` 正常输出。
+- 依赖安装：推荐使用 [uv](https://github.com/astral-sh/uv)。
   ```bash
-  uv run python scripts/train.py --config configs/data.yaml
+  uv sync
   ```
-- 其他超参数可通过命令行传入，例如 `--epochs 50 --model yolov8s.pt --batch 16`
+  如不使用 uv，可手动创建虚拟环境：
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
+- 初次启动建议运行一次冒烟脚本，用于创建演示数据与输出目录：
+  ```bash
+  uv run --module basedetect
+  ```
+- 长时间训练前，检查 `CUDA_VISIBLE_DEVICES` 是否指向目标 GPU；Ultralytics 若检测不到 CUDA 会直接落到 CPU。
 
-### 训练脚本参数
-```
-uv run python scripts/train.py [参数]
-```
-- `--config PATH`：数据集配置文件；默认值 `'auto'` 会生成存放在 `datasets/demo/data.yaml` 的演示数据集。
-- `--model SOURCE`：初始化权重（文件路径或 Ultralytics 模型名），默认指向 `weights/pretrained/yolov8n.pt`。
-- `--epochs N`：训练轮数（默认 `10`）。
-- `--batch N`：每批次的图像数量（默认 `8`）。
-- `--imgsz N`：训练时的输入尺寸，使用方形图像（默认 `640`）。
-- `--device VALUE`：传递给 Ultralytics 的设备字符串；`auto`（默认）在检测到 CUDA 时映射为 `0`，否则回退到 `cpu`。
-- `--workers N`：数据加载进程数（默认 `4`）。
-- `--project PATH`：Ultralytics 实验目录的父路径（默认 `artifacts/runs`）。
-- `--name RUN_NAME`：实验子目录名称（默认 `basedetect`）。
-- `--patience N`：早停策略的耐心值（默认 `10`）。
-- `--resume`：从最近一次保存的检查点继续训练。
+## 快速开始
+1. `uv sync` 安装依赖。
+2. `uv run --module basedetect` 生成 demo 数据集与目录结构。
+3. `uv run scripts/train.py` 使用演示集训练，确认 `artifacts/runs/basedetect/` 写出日志与 `weights/best.pt`。
+4. `uv run scripts/predict.py` 跑通 `test/test3.mp4`，验证在 `artifacts/outputs/output.avi` 生成带框视频。
 
-示例：
+若要替换为 Roboflow 数据，只需将导出的 `train/valid/test` 拷贝到 `datasets/<dataset_name>/`，并在训练命令中传入相应的 `configs/*.yaml`。
+
+## 训练流程
+运行训练脚本：
 ```bash
-# 在 GPU 上训练 Roboflow 数据集，并延长训练轮数
-uv run python scripts/train.py --config configs/data.yaml --epochs 50 --device 0
+uv run scripts/train.py [参数]
+```
+- `--config PATH`：数据集配置文件。默认 `auto` 会创建 `datasets/demo/data.yaml` 并使用生成的小型数据。
+- `--model SOURCE`：初始权重路径或 Ultralytics 模型名。默认读取 `weights/pretrained/yolov8n.pt`。
+- `--epochs / --batch / --imgsz`：常规超参，缺省值分别为 `10`、`8`、`640`。
+- `--device`：传递给 YOLO 的设备字符串；在 `auto` 模式下优先使用首块 GPU。
+- `--project / --name`：实验输出位置，默认为 `artifacts/runs/basedetect`。
+- `--resume` 与 `--patience`：对应重训与早停策略。
 
-# 在 CPU 上快速试验，使用较小 batch
-uv run python scripts/train.py --model yolov8n.pt --device cpu --batch 4
+建议习惯：
+- 训练完成后记录 `artifacts/runs/basedetect/results.csv` 中的关键指标（mAP、precision、recall）。
+- 若需要对比多次实验，可调整 `--name` 生成单独目录，避免覆盖。
+- 调参与模型切换建议在 PR 或笔记中留下一份命令行及训练日志，便于后续复现。
+
+进阶示例：
+```bash
+# 使用 Roboflow 数据集并延长训练
+uv run scripts/train.py --config configs/data.yaml --epochs 50 --device 0
+
+# CPU 上快速试验，调小 batch
+uv run scripts/train.py --model yolov8n.pt --device cpu --batch 4
 ```
 
 ## 推理与跟踪
 ```bash
-uv run python scripts/predict.py
+uv run scripts/predict.py [参数]
 ```
-程序默认读取 `test/test3.mp4`，优先选用最近一次训练生成的 `weights/best.pt`，否则回退到 `yolov8n.pt`，并在后台写出 `artifacts/outputs/output.avi`。常用参数：
-- `--show`：在桌面环境中弹出实时窗口
-- `--weights /path/to/best.pt`：手动指定权重
-- `--source 0`：切换到摄像头或自定义视频源
+- `--weights`：自动查找最近的 `artifacts/runs/**/weights/best.pt`，如未找到则回退到 `weights/pretrained/yolov8n.pt`。
+- `--source`：输入源，既可以是 `test/test3.mp4` 等文件，也可以直接给摄像头索引。
+- `--output`：输出视频路径，默认 `artifacts/outputs/output.avi`。
+- `--conf / --device / --no-save / --show` 等参数与 Ultralytics CLI 用法一致，便于迁移。
 
-### 推理脚本参数
-```
-uv run python scripts/predict.py [参数]
-```
-- `--weights SOURCE`：权重文件路径或模型名称；默认 `auto` 会选择最新的 `artifacts/runs/**/weights/best.pt`，若不存在则使用 `weights/pretrained/yolov8n.pt`。
-- `--source INPUT`：视频路径或摄像头索引（默认 `test/test3.mp4`）。
-- `--output PATH`：保存标注视频的输出路径（默认 `artifacts/outputs/output.avi`）。
-- `--device VALUE`：推理设备；`auto`（默认）在有 CUDA 时取 `0`，否则取 `cpu`。
-- `--conf THRESH`：检测置信度阈值（默认 `0.25`）。
-- `--no-save`：不写出标注视频。
-- `--show`：弹出 OpenCV 窗口实时显示（按 `q` 退出）。
-
-示例：
+常见用法：
 ```bash
-# 打开摄像头并显示实时窗口
-uv run python scripts/predict.py --source 0 --show
+# 推理摄像头画面并弹窗查看
+uv run scripts/predict.py --source 0 --show
 
-# 指定某次实验的权重进行离线推理且不保存视频
-uv run python scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --no-save
+# 指定历史实验的 best 权重，生成离线视频
+uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --source test/test3.mp4
 ```
 
-## 数据准备
-演示数据集位于 `datasets/demo/`，对应的 `data.yaml` 会在初始化时自动生成；`configs/data.yaml` 指向 Roboflow 项目 `robocon-ozkss/base-inspection-txwpc`。导出 YOLOv8 格式后，将 `train/valid/test` 文件夹放入 `datasets/`。为避免仓库膨胀，确保 raw 数据与 `artifacts/` 目录都在 `.gitignore` 中。
+## 数据与配置管理
+- `configs/` 保存数据源与实验设置，`configs/data.yaml` 指向 Roboflow 项目 `robocon-ozkss/base-inspection-txwpc`。如需新增数据，只需复制模板并修改路径。
+- `datasets/` 下的目录建议命名为数据版本，如 `datasets/roboflow_v1/`；Roboflow 导出的 `train/valid/test` 直接放入该目录。
+- 仓库已在 `.gitignore` 中排除 `datasets/` 与 `artifacts/`，提交前可快速执行 `git status` 确认未包含大文件。
 
-## 贡献说明
-遵循 `AGENTS.md` 中的提交约定（Conventional Commits、PR 说明、手动测试证据）。在 issue 中同步数据访问或架构上的问题，以便协作。
+## 手动测试清单
+- `uv run scripts/predict.py`，检查 `artifacts/outputs/output.avi` 是否更新，确保视频帧内有检测框与轨迹。
+- 针对每个 `test/` 下的演示视频重复上述命令，确认兼容不同分辨率。
+- 训练逻辑调整后，记录 `artifacts/runs/<run_name>/results.csv` 最新指标；必要时截取 loss/precision 曲线附在 PR 中。
+- 若修改了 CLI 参数解析或路径逻辑，使用 `uv run --module basedetect` 做一次冒烟，验证目录与默认文件都能正确创建。
+
+## 贡献与协作
+- 提交信息遵循 Conventional Commits，例如 `feat: add thermal preprocessor`。
+- PR 中附上操作命令、复现步骤以及关键信息（模型配置、训练轮数、评估指标）。
+- 数据访问或架构讨论请在 issue 中同步，避免口头约定难以追踪。
+
+## 常见问题
+- **脚本退回 CPU**：检查 `CUDA_VISIBLE_DEVICES` 是否被设置为空，或 `nvidia-smi` 是否能读取目标 GPU。必要时显式传入 `--device 0`。
+- **权重路径找不到**：训练前确认 `weights/pretrained/yolov8n.pt` 存在；若复制到别处，可通过 `--weights` 手动指定。
+- **输出目录不存在**：运行推理脚本前确保执行过 `uv run --module basedetect` 或手动创建 `artifacts/outputs/`。
+- **Roboflow 标签不匹配**：导出 YOLOv8 格式时保持默认类别顺序，并在 `configs/*.yaml` 中同步 `names` 字段。
 
 ## 资源
 - 英文文档：README.md

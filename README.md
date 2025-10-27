@@ -2,122 +2,110 @@
 
 [中文文档](README.zh.md)
 
-YOLOv8-based pipeline for detecting and tracking machine bases in monochrome video feeds. The repo bundles training scripts, inference utilities, and reference assets so you can fine-tune Ultralytics models on the Roboflow Base Inspection dataset and replay detections on sample footage.
+BaseDetect packages a YOLOv8-based workflow for detecting and tracking machine bases in monochrome video feeds. The repository ships training and inference scripts, a smoke-test dataset, pretrained checkpoints, and sample footage so you can validate the pipeline quickly and iterate on your own data.
 
 ## Repository Layout
-- `scripts/train.py` — CLI for training that bootstraps a lightweight demo dataset and launches Ultralytics with sensible defaults.
-- `scripts/predict.py` — CLI that pulls the newest weights (or a fallback checkpoint), converts frames to grayscale, and streams/saves annotated video.
-- `basedetect/` — lightweight package used for `python -m basedetect` smoke tests or future shared helpers.
-- `configs/data.yaml` — dataset + class metadata shared by the trainer.
-- `datasets/` — expected Roboflow export with `train/`, `valid/`, and `test/` splits.
-- `test/` — short demo clips for quick regression checks.
-- `artifacts/` — auto-created experiment logs (`artifacts/runs/`) and rendered videos (`artifacts/outputs/`).
-- `weights/pretrained/` — cached YOLO checkpoints used to bootstrap training.
-- `AGENTS.md` — contributor guide covering style, testing, and review expectations.
-
-### Project Structure Explained
 ```
 BaseDetect/
-├─ basedetect/             # Python package entry point and shared helpers
+├─ basedetect/             # Package entry point, usable via `uv run --module basedetect`
 ├─ scripts/                # Operational scripts (training, inference)
-├─ configs/                # Dataset + experiment configuration files
-├─ datasets/               # Roboflow exports: train/ valid/ test/ splits
-├─ test/                   # Small demo clips for quick regressions
+├─ configs/                # Dataset / experiment configuration files
+├─ datasets/               # Roboflow exports (train/ valid/ test splits)
+├─ test/                   # Short demo clips for regression checks
 ├─ weights/pretrained/     # Cached YOLO checkpoints
 ├─ artifacts/              # Generated runs/, metrics, and output videos
 ├─ README.md / README.zh.md# Project documentation
 └─ AGENTS.md               # Contributor guide
 ```
-The separation keeps code, configs, raw data, and generated artifacts isolated so the workspace stays tidy and large files remain outside version control.
+Code, configuration, raw data, and generated artifacts live in separate directories so the workspace stays tidy and large files stay out of git.
 
-## Setup
-1. Install Python 3.9+ and a recent CUDA toolkit if you plan to train on GPU.
-2. Prefer [`uv`](https://github.com/astral-sh/uv) for reproducible environments:
-   ```bash
-   uv sync
-   ```
-   or fall back to pip:
-   ```bash
-   python -m venv .venv && source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-3. Bootstrap folders and generate the synthetic demo dataset:
-   ```bash
-   uv run python -m basedetect
-   ```
-4. Verify `nvidia-smi` shows the intended device before long runs (`CUDA_VISIBLE_DEVICES=0` is respected by Ultralytics).
+## Environment Setup
+- Python: 3.9 or newer. Install a recent CUDA toolkit if you plan to train on GPU.
+- Dependencies: prefer [`uv`](https://github.com/astral-sh/uv) for reproducible environments.
+  ```bash
+  uv sync
+  ```
+  If you need to fall back to pip:
+  ```bash
+  python -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
+  ```
+- First run: bootstrap folders and the synthetic demo dataset.
+  ```bash
+  uv run --module basedetect
+  ```
+- Before long training jobs, double-check `nvidia-smi` and `CUDA_VISIBLE_DEVICES` to ensure Ultralytics sees the intended GPU.
 
-## Train & Evaluate
-Fine-tune from the provided Ultralytics checkpoints (defaults to a synthetic demo dataset so the command succeeds immediately):
+## Quickstart Checklist
+1. `uv sync` to install dependencies.
+2. `uv run --module basedetect` to create the demo dataset and required directories.
+3. `uv run scripts/train.py` to fine-tune on the demo data; confirm `artifacts/runs/basedetect/` contains logs and `weights/best.pt`.
+4. `uv run scripts/predict.py` to process `test/test3.mp4` and produce `artifacts/outputs/output.avi`.
+
+To switch to the Roboflow dataset, drop the exported `train/`, `valid/`, and `test/` folders under `datasets/<name>/` and point the trainer at the matching `configs/*.yaml`.
+
+## Training Workflow
+Run the training CLI:
 ```bash
-uv run python scripts/train.py
+uv run scripts/train.py [options]
 ```
-Key outputs land under `artifacts/runs/basedetect/` (check `results.csv`, `weights/best.pt`, and rendered plots). Switch to your real Roboflow export by pointing at the bundled config:
-```bash
-uv run python scripts/train.py --config configs/data.yaml
-```
-Add other overrides (epochs, batch size, model variant) through CLI flags, e.g. `--epochs 50 --model yolov8s.pt`.
+- `--config PATH` — dataset YAML. The default `'auto'` builds a demo dataset at `datasets/demo/data.yaml`.
+- `--model SOURCE` — initial weights (file path or Ultralytics model name). Defaults to `weights/pretrained/yolov8n.pt`.
+- `--epochs / --batch / --imgsz` — standard hyperparameters with defaults `10`, `8`, and `640`.
+- `--device` — Ultralytics device string; `auto` prefers the first GPU when CUDA is available.
+- `--project / --name` — overrides for the Ultralytics experiment directory (`artifacts/runs/basedetect` by default).
+- `--resume`, `--patience` — control checkpoint resumption and early stopping.
 
-### Train CLI options
-```
-uv run python scripts/train.py [options]
-```
-- `--config PATH` — dataset YAML; the default `'auto'` generates a synthetic dataset at `datasets/demo/data.yaml`.
-- `--model SOURCE` — initial weights (file path or Ultralytics model name). Default points to `weights/pretrained/yolov8n.pt`.
-- `--epochs N` — number of training epochs (default `10`).
-- `--batch N` — batch size per iteration (default `8`).
-- `--imgsz N` — square image resolution used for training (default `640`).
-- `--device VALUE` — Ultralytics device string. `auto` (default) maps to `0` when CUDA is available, otherwise `cpu`.
-- `--workers N` — dataloader worker processes (default `4`).
-- `--project PATH` — parent directory for Ultralytics experiment folders (default `artifacts/runs`).
-- `--name RUN_NAME` — experiment sub-directory name (default `basedetect`).
-- `--patience N` — early-stopping patience in epochs (default `10`).
-- `--resume` — resume the most recent checkpoint saved in the run directory.
+Recommended habits:
+- After each run, capture metrics from `artifacts/runs/basedetect/results.csv` (mAP, precision, recall).
+- Use distinct `--name` values when comparing experiments to avoid overwriting outputs.
+- When tuning hyperparameters, note the commands and logs in your PR or experiment diary for reproducibility.
 
 Examples:
 ```bash
-# GPU training on Roboflow export with more epochs
-uv run python scripts/train.py --config configs/data.yaml --epochs 50 --device 0
+# Longer GPU training on the Roboflow export
+uv run scripts/train.py --config configs/data.yaml --epochs 50 --device 0
 
-# CPU-only experiment with a smaller model
-uv run python scripts/train.py --model yolov8n.pt --device cpu --batch 4
+# Lightweight CPU experiment with a smaller batch
+uv run scripts/train.py --model yolov8n.pt --device cpu --batch 4
 ```
 
-## Run Tracking Demo
-Use the grayscale tracker on bundled footage (auto-picks the latest trained weights, otherwise falls back to `yolov8n.pt`):
+## Tracking & Inference
+Run the inference CLI:
 ```bash
-uv run python scripts/predict.py
+uv run scripts/predict.py [options]
 ```
-By default it reads `test/test3.mp4`, writes `artifacts/outputs/output.avi`, and runs headless. Add `--show` for a live window or `--weights /path/to/best.pt` to inspect a specific checkpoint. Use `--source 0` to attach a webcam.
+- `--weights` — selects the newest `artifacts/runs/**/weights/best.pt` or falls back to `weights/pretrained/yolov8n.pt`.
+- `--source` — video path or camera index (`test/test3.mp4` by default).
+- `--output` — annotated video destination (`artifacts/outputs/output.avi` by default).
+- `--device`, `--conf`, `--no-save`, `--show` — mirror the Ultralytics CLI options.
 
-### Predict CLI options
-```
-uv run python scripts/predict.py [options]
-```
-- `--weights SOURCE` — path or model name for inference weights; `auto` (default) selects the newest `artifacts/runs/**/weights/best.pt` or falls back to `weights/pretrained/yolov8n.pt`.
-- `--source INPUT` — video path or camera index (default `test/test3.mp4`).
-- `--output PATH` — annotated video destination when saving is enabled (default `artifacts/outputs/output.avi`).
-- `--device VALUE` — Ultralytics device string; `auto` (default) maps to `0` when CUDA is detected, otherwise `cpu`.
-- `--conf THRESH` — detection confidence threshold (default `0.25`).
-- `--no-save` — disable writing the annotated video to disk.
-- `--show` — open an OpenCV window for live preview (press `q` to exit).
-
-Examples:
+Common patterns:
 ```bash
-# Live webcam preview with GUI window
-uv run python scripts/predict.py --source 0 --show
+# Live webcam preview with an on-screen window
+uv run scripts/predict.py --source 0 --show
 
-# Benchmark a specific checkpoint without saving output
-uv run python scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --no-save
+# Evaluate a specific checkpoint and keep the rendered video
+uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --source test/test3.mp4
 ```
 
-## Data Preparation
-The synthetic smoke-test dataset lives under `datasets/demo/` with its own `data.yaml` generated automatically. `configs/data.yaml` targets the Roboflow project (`robocon-ozkss/base-inspection-txwpc`). Export it with YOLOv8 format and drop the `train/`, `valid/`, and `test/` folders under `datasets/`. Keep raw data and generated artifacts out of version control; use `.gitignore` to skip large assets.
+## Data & Configuration Management
+- `configs/` stores dataset descriptors and experiment settings. `configs/data.yaml` points to the Roboflow project `robocon-ozkss/base-inspection-txwpc`. Copy it when creating new variants and adjust paths accordingly.
+- Organize Roboflow exports under descriptive directories such as `datasets/roboflow_v1/`. Place the `train/`, `valid/`, and `test/` folders directly inside.
+- `.gitignore` already excludes `datasets/` and `artifacts/`. Always review `git status` before committing to ensure large files stay local.
+
+## Manual Validation
+- `uv run scripts/predict.py` and confirm `artifacts/outputs/output.avi` updates and contains bounding boxes and tracks.
+- Repeat inference for each clip in `test/` to ensure different resolutions behave correctly.
+- After training changes, record fresh metrics from `artifacts/runs/<run_name>/results.csv`; grab loss/precision plots when useful for reviews.
+- Whenever CLI argument parsing or default paths change, run `uv run --module basedetect` as a smoke test to confirm directories and demo data still initialize correctly.
 
 ## Troubleshooting
-- **Video fails to open**: confirm `test/*.mp4` exists and codec support via `ffmpeg -codecs`.
-- **No detections**: verify your weights path and that inference frames are still 3-channel after grayscale conversion.
-- **CPU fallback**: Ultralytics drops to CPU quietly if CUDA is unavailable—watch the console log at startup.
+- **Falls back to CPU** — check `CUDA_VISIBLE_DEVICES` and `nvidia-smi`. Pass `--device 0` explicitly if the environment masks GPUs.
+- **Weights not found** — confirm `weights/pretrained/yolov8n.pt` exists or point `--weights` to the desired checkpoint.
+- **Missing output directory** — run the smoke test or create `artifacts/outputs/` manually before inference.
+- **Label mismatch after Roboflow export** — export in YOLOv8 format and ensure `names` in `configs/*.yaml` matches the dataset.
 
 ## Contributing
-Follow the practices in `AGENTS.md` (Conventional Commits, concise PR summaries, manual test evidence). File issues for architecture questions or dataset access problems so the team can triage quickly.
+Follow `AGENTS.md` for Conventional Commits, focused PRs, and manual test evidence. Surface dataset access or architectural questions via issues so the team can coordinate fixes promptly.
