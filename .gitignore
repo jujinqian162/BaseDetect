@@ -11,5 +11,3 @@ wheels/
 
 # Generated artifacts
 artifacts/
-datasets/
-datasets-initial/
