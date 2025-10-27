@@ -10,7 +10,10 @@ BaseDetect/
 ├─ basedetect/             # Package entry point, usable via `uv run --module basedetect`
 ├─ scripts/                # Operational scripts (training, inference)
 ├─ configs/                # Dataset / experiment configuration files
-├─ datasets/               # Roboflow exports (train/ valid/ test splits)
+├─ datasets/               # Dataset collections and exports
+│  ├─ datasets2/           # Roboflow export referenced by configs/data.yaml
+│  ├─ datasets-initial/    # Default dataset referenced by configs/data-initial.yaml
+│  └─ demo/                # Synthetic dataset generated via `--config auto`
 ├─ test/                   # Short demo clips for regression checks
 ├─ weights/pretrained/     # Cached YOLO checkpoints
 ├─ artifacts/              # Generated runs/, metrics, and output videos
@@ -39,11 +42,11 @@ Code, configuration, raw data, and generated artifacts live in separate director
 
 ## Quickstart Checklist
 1. `uv sync` to install dependencies.
-2. Ensure the dataset referenced by `configs/data-initial.yaml` is available (see Data & Configuration Management).
+2. Ensure the dataset referenced by `configs/data-initial.yaml` (`datasets/datasets-initial/`) is available (see Data & Configuration Management).
 3. `uv run scripts/train.py` to fine-tune using `configs/data-initial.yaml`; confirm `artifacts/runs/basedetect/` contains logs and `weights/best.pt`.
 4. `uv run scripts/predict.py` to process `test/test3.mp4` and produce `artifacts/outputs/output.avi`.
 
-Need a lightweight demo dataset instead? Run `uv run --module basedetect` and launch training with `uv run scripts/train.py --config auto`.
+Need a lightweight demo dataset instead? Run `uv run --module basedetect` to populate `datasets/demo/`, then launch training with `uv run scripts/train.py --config auto`.
 
 ## Training Workflow
 Run the training CLI:
@@ -91,15 +94,16 @@ uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --
 ```
 
 ## Data & Configuration Management
-- `configs/` stores dataset descriptors and experiment settings. `configs/data-initial.yaml` is the default for training, while `configs/data.yaml` points to the Roboflow project `robocon-ozkss/base-inspection-txwpc`. Copy either when creating new variants and adjust paths accordingly.
-- Organize dataset exports under descriptive directories such as `datasets-initial/` or `datasets/roboflow_v1/`, matching the paths declared in each config. Place the `train/`, `valid/`, and `test/` folders directly inside.
-- `.gitignore` already excludes `datasets/` and `artifacts/`. Always review `git status` before committing to ensure large files stay local.
+- `configs/` stores dataset descriptors and experiment settings. `configs/data-initial.yaml` (default) points to `datasets/datasets-initial/`, while `configs/data.yaml` references the Roboflow export under `datasets/datasets2/`. Copy either when creating new variants and adjust paths accordingly.
+- Place all dataset exports under `datasets/` (e.g., `datasets/custom_v1/`). Each dataset folder should contain `train/`, `valid/`, and `test/` subdirectories that match the YAML paths.
+- Synthetic demo data lives in `datasets/demo/`. Regenerate it anytime with `uv run --module basedetect`.
+- Keep large assets (datasets, artifacts) out of commits—double-check `git status` before pushing.
 
 ## Manual Validation
 - `uv run scripts/predict.py` and confirm `artifacts/outputs/output.avi` updates and contains bounding boxes and tracks.
 - Repeat inference for each clip in `test/` to ensure different resolutions behave correctly.
 - After training changes, record fresh metrics from `artifacts/runs/<run_name>/results.csv`; grab loss/precision plots when useful for reviews.
-- Whenever CLI argument parsing or default paths change, run `uv run --module basedetect` as a smoke test to confirm directories and demo data still initialize correctly.
+- Whenever CLI argument parsing or default paths change, run `uv run scripts/test_cli.py` for parameter smoke tests and `uv run --module basedetect` to confirm demo data still initializes correctly.
 
 ## Troubleshooting
 - **Falls back to CPU** — check `CUDA_VISIBLE_DEVICES` and `nvidia-smi`. Pass `--device 0` explicitly if the environment masks GPUs.
