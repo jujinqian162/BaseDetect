@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import logging
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -13,6 +14,19 @@ import torch
 from ultralytics import YOLO
 
 from basedetect.paths import ensure_runtime_dirs, outputs_dir, pretrained_dir, project_root, runs_dir
+
+
+LOGGER = logging.getLogger(__name__)
+YELLOW = "\033[33m"
+RESET = "\033[0m"
+
+
+def _warn_fallback(target: str) -> None:
+    message = (
+        f"{YELLOW}⚠️ 警告：未找到训练权重，已回退到预训练模型 {target}。\n"
+        f"⚠️ Warning: Trained weights unavailable. Falling back to pretrained model {target}.{RESET}"
+    )
+    LOGGER.warning(message)
 
 
 def parse_args() -> argparse.Namespace:
@@ -70,7 +84,9 @@ def resolve_weights(weights: str) -> str:
         return str(candidates[0])
     local_default = pretrained_dir() / "yolov8n.pt"
     if local_default.exists():
+        _warn_fallback(str(local_default))
         return str(local_default)
+    _warn_fallback("yolov8n.pt")
     return "yolov8n.pt"
 
 

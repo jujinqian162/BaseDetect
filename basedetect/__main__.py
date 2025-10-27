@@ -7,7 +7,7 @@ from basedetect.paths import ensure_runtime_dirs
 def main() -> None:
     ensure_runtime_dirs()
     ensure_demo_dataset()
-    print("BaseDetect environment ready. Try `uv run python scripts/predict.py`.")
+    print("BaseDetect environment ready. Try `uv run scripts/predict.py`.")
 
 
 if __name__ == "__main__":
