@@ -21,10 +21,32 @@ YELLOW = "\033[33m"
 RESET = "\033[0m"
 
 
+def _is_pretrained(path_or_name: Path | str) -> bool:
+    if isinstance(path_or_name, Path):
+        try:
+            return path_or_name.resolve().is_relative_to(pretrained_dir().resolve())
+        except AttributeError:
+            try:
+                path_or_name.resolve().relative_to(pretrained_dir().resolve())
+                return True
+            except ValueError:
+                return False
+    candidate = Path(str(path_or_name)).name
+    return candidate.startswith("yolov")
+
+
 def _warn_fallback(target: str) -> None:
     message = (
         f"{YELLOW}⚠️ 警告：未找到训练权重，已回退到预训练模型 {target}。\n"
         f"⚠️ Warning: Trained weights unavailable. Falling back to pretrained model {target}.{RESET}"
+    )
+    LOGGER.warning(message)
+
+
+def _warn_pretrained(target: str) -> None:
+    message = (
+        f"{YELLOW}⚠️ 警告：正在使用预训练模型 {target}。\n"
+        f"⚠️ Warning: Using pretrained model {target}.{RESET}"
     )
     LOGGER.warning(message)
 
@@ -72,7 +94,11 @@ def resolve_weights(weights: str) -> str:
     if weights != "auto":
         path = Path(weights).expanduser()
         if path.exists():
+            if _is_pretrained(path):
+                _warn_pretrained(str(path))
             return str(path)
+        if _is_pretrained(weights):
+            _warn_pretrained(weights)
         return weights
 
     candidates = sorted(
