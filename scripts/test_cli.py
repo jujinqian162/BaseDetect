@@ -88,7 +88,7 @@ class PredictCLISmoke(TestCase):
         mock_yolo: mock.Mock,
         mock_video_capture: mock.Mock,
         _video_writer: mock.Mock,
-        _imshow: mock.Mock,
+        mock_imshow: mock.Mock,
         _wait_key: mock.Mock,
         _destroy: mock.Mock,
         _ensure_dirs: mock.Mock,
@@ -123,6 +123,7 @@ class PredictCLISmoke(TestCase):
             any("警告" in entry for entry in log_ctx.output),
             "Expected bilingual warning missing from logs.",
         )
+        mock_imshow.assert_called()
 
     @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
     @mock.patch("scripts.predict.ensure_runtime_dirs")
@@ -165,7 +166,6 @@ class PredictCLISmoke(TestCase):
                 str(tmp_path / "sample.mp4"),
                 "--output",
                 str(output_path),
-                "--show",
             ]
             with mock.patch.object(sys, "argv", argv):
                 from scripts import predict as predict_module
@@ -177,6 +177,44 @@ class PredictCLISmoke(TestCase):
         mock_video_writer.assert_called_once()
         mock_imshow.assert_called()
         mock_destroy.assert_called_once()
+
+    @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.predict.ensure_runtime_dirs")
+    @mock.patch("scripts.predict.cv2.destroyAllWindows")
+    @mock.patch("scripts.predict.cv2.waitKey", return_value=0)
+    @mock.patch("scripts.predict.cv2.imshow")
+    @mock.patch("scripts.predict.cv2.VideoWriter")
+    @mock.patch("scripts.predict.cv2.VideoCapture")
+    @mock.patch("scripts.predict.YOLO")
+    def test_unshow_disables_display(
+        self,
+        mock_yolo: mock.Mock,
+        mock_video_capture: mock.Mock,
+        _video_writer: mock.Mock,
+        mock_imshow: mock.Mock,
+        _wait_key: mock.Mock,
+        mock_destroy: mock.Mock,
+        _ensure_dirs: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        frame = np.zeros((16, 16, 3), dtype=np.uint8)
+        capture_instance = mock_video_capture.return_value
+        capture_instance.isOpened.return_value = True
+        capture_instance.read.side_effect = [(True, frame), (False, frame)]
+
+        track_result = SimpleNamespace(plot=lambda: frame)
+        mock_yolo.return_value.track.return_value = [track_result]
+
+        argv = ["scripts/predict.py", "--source", "0", "--unshow", "--no-save"]
+        with mock.patch.object(sys, "argv", argv):
+            from scripts import predict as predict_module
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with mock.patch("scripts.predict.runs_dir", return_value=Path(tmpdir)):
+                    predict_module.main()
+
+        mock_imshow.assert_not_called()
+        mock_destroy.assert_not_called()
 
     @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
     @mock.patch("scripts.predict.ensure_runtime_dirs")

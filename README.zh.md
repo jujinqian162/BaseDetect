@@ -76,13 +76,16 @@ uv run scripts/predict.py [参数]
 - `--weights`：自动查找最近的 `artifacts/runs/**/weights/best.pt`，如未找到则回退到 `weights/pretrained/yolov8n.pt`。
 - `--source`：输入源，既可以是 `test/test3.mp4` 等文件，也可以直接给摄像头索引。
 - `--output`：输出视频路径，默认 `artifacts/outputs/output.avi`。
-- `--conf / --device / --no-save / --show` 等参数与 Ultralytics CLI 用法一致，便于迁移。
+- `--conf / --device / --no-save / --unshow` 等参数与 Ultralytics CLI 用法一致，便于迁移。
 - 当 `--weights auto` 未找到最新训练权重时，会打印黄色的中英双语警告并回退到内置预训练模型，确保你了解当前使用的权重来源。
 
 常见用法：
 ```bash
 # 推理摄像头画面并弹窗查看
-uv run scripts/predict.py --source 0 --show
+uv run scripts/predict.py --source 0
+
+# 无需展示窗口时可禁用
+uv run scripts/predict.py --source 0 --unshow
 
 # 指定历史实验的 best 权重，生成离线视频
 uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --source test/test3.mp4

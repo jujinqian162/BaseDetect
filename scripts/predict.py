@@ -81,12 +81,13 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Skip writing the annotated video to disk.",
     )
-    parser.set_defaults(save=True)
     parser.add_argument(
-        "--show",
-        action="store_true",
-        help="Display annotated frames with OpenCV (may require a GUI session).",
+        "--unshow",
+        dest="show",
+        action="store_false",
+        help="Disable on-screen display of annotated frames.",
     )
+    parser.set_defaults(save=True, show=True)
     return parser.parse_args()
 
 

@@ -80,13 +80,16 @@ uv run scripts/predict.py [options]
 - `--weights` — selects the newest `artifacts/runs/**/weights/best.pt` or falls back to `weights/pretrained/yolov8n.pt`.
 - `--source` — video path or camera index (`test/test3.mp4` by default).
 - `--output` — annotated video destination (`artifacts/outputs/output.avi` by default).
-- `--device`, `--conf`, `--no-save`, `--show` — mirror the Ultralytics CLI options.
+- `--device`, `--conf`, `--no-save`, `--unshow` — mirror the Ultralytics CLI options.
 - When `--weights auto` cannot find a freshly trained checkpoint, the script emits a yellow bilingual warning and falls back to the bundled pretrained model so you know which weights are in use.
 
 Common patterns:
 ```bash
 # Live webcam preview with an on-screen window
-uv run scripts/predict.py --source 0 --show
+uv run scripts/predict.py --source 0
+
+# disable on-screen preview if you're running headless
+uv run scripts/predict.py --source 0 --unshow
 
 # Evaluate a specific checkpoint and keep the rendered video
 uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --source test/test3.mp4
