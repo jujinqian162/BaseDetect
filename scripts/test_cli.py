@@ -41,35 +41,6 @@ class TrainCLISmoke(TestCase):
         self.assertTrue(str(called_kwargs["data"]).endswith("configs/data-initial.yaml"))
         self.assertTrue(any("预训练" in entry for entry in log_ctx.output))
 
-    @mock.patch("scripts.train.torch.cuda.is_available", return_value=False)
-    @mock.patch("scripts.train.YOLO")
-    def test_auto_dataset_runs(self, mock_yolo: mock.Mock, _: mock.Mock) -> None:
-        mock_model = mock_yolo.return_value
-        mock_model.train.return_value = None
-
-        argv = [
-            "scripts/train.py",
-            "--config",
-            "auto",
-            "--epochs",
-            "1",
-            "--batch",
-            "1",
-            "--imgsz",
-            "64",
-            "--device",
-            "cpu",
-        ]
-        with mock.patch.object(sys, "argv", argv):
-            from scripts import train as train_module
-
-            train_module.main()
-
-        mock_model.train.assert_called_once()
-        called_kwargs = mock_model.train.call_args.kwargs
-        self.assertIn("data", called_kwargs)
-        self.assertTrue(str(called_kwargs["data"]).endswith("datasets/demo/data.yaml"))
-
     def test_missing_config_raises(self) -> None:
         argv = ["scripts/train.py", "--config", "definitely_missing.yaml"]
         with mock.patch.object(sys, "argv", argv):

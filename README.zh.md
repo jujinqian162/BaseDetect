@@ -11,7 +11,6 @@ BaseDetect/
 ├─ datasets/               # 数据集汇总目录
 │  ├─ datasets2/           # configs/data.yaml 指向的 Roboflow 导出
 │  ├─ datasets-initial/    # configs/data-initial.yaml 默认使用的数据
-│  └─ demo/                # `--config auto` 自动生成的演示数据
 ├─ test/                   # 演示或回归使用的视频片段
 ├─ weights/pretrained/     # 预训练 YOLO 权重缓存
 ├─ artifacts/              # 训练日志、推理输出、临时可视化
@@ -32,7 +31,7 @@ BaseDetect/
   source .venv/bin/activate
   pip install -r requirements.txt
   ```
-- 初次启动建议运行一次冒烟脚本，用于创建演示数据与输出目录：
+- 初次启动可运行冒烟脚本创建运行期目录，确保推理输出和权重能够顺利写入：
   ```bash
   uv run --module basedetect
   ```
@@ -43,15 +42,12 @@ BaseDetect/
 2. 确保 `configs/data-initial.yaml` 对应的 `datasets/datasets-initial/` 数据集已准备完毕（参见“数据与配置管理”）。
 3. `uv run scripts/train.py` 使用 `configs/data-initial.yaml` 进行训练，确认 `artifacts/runs/basedetect/` 写出日志与 `weights/best.pt`。
 4. `uv run scripts/predict.py` 跑通 `test/test3.mp4`，验证在 `artifacts/outputs/output.avi` 生成带框视频。
-
-如果需要临时体验 demo 数据集，可运行 `uv run --module basedetect` 生成 `datasets/demo/`，并在训练命令中添加 `--config auto`。
-
 ## 训练流程
 运行训练脚本：
 ```bash
 uv run scripts/train.py [参数]
 ```
-- `--config PATH`：数据集配置文件。默认读取 `configs/data-initial.yaml`；传入 `auto` 会创建 `datasets/demo/data.yaml` 并使用生成的小型数据。
+- `--config PATH`：数据集配置文件，默认读取 `configs/data-initial.yaml`。
 - `--model SOURCE`：初始权重路径或 Ultralytics 模型名。默认读取 `weights/pretrained/yolov8n.pt`。
 - `--epochs / --batch / --imgsz`：常规超参，缺省值分别为 `10`、`8`、`640`。
 - `--device`：传递给 YOLO 的设备字符串；在 `auto` 模式下优先使用首块 GPU。
@@ -95,14 +91,13 @@ uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --
 ## 数据与配置管理
 - `configs/` 保存数据源与实验设置。默认使用的 `configs/data-initial.yaml` 指向 `datasets/datasets-initial/`；`configs/data.yaml` 对应 `datasets/datasets2/` 下的 Roboflow 数据。复制模板即可衍生新配置。
 - 所有数据集统一存放在 `datasets/` 内，可按需创建如 `datasets/custom_v1/` 的目录，并确保其下包含 `train/valid/test` 子目录，以便 YAML 路径正确指向。
-- 演示数据位于 `datasets/demo/`，执行 `uv run --module basedetect` 可随时重新生成。
 - 提交前请检查 `git status`，避免意外提交体积较大的数据或产物。
 
 ## 手动测试清单
 - `uv run scripts/predict.py`，检查 `artifacts/outputs/output.avi` 是否更新并包含检测框，同时仅在自动回退预训练权重时出现黄色中英双语警告。
 - 针对每个 `test/` 下的演示视频重复上述命令，确认兼容不同分辨率。
 - 训练逻辑调整后，记录 `artifacts/runs/<run_name>/results.csv` 最新指标；必要时截取 loss/precision 曲线附在 PR 中。
-- 若修改了 CLI 参数解析或路径逻辑，使用 `uv run scripts/test_cli.py` 做参数冒烟，并运行 `uv run --module basedetect` 确认演示数据仍可生成。
+- 若修改了 CLI 参数解析或路径逻辑，使用 `uv run scripts/test_cli.py` 做参数冒烟，并运行 `uv run --module basedetect` 确认运行期目录正常创建。
 
 ## 贡献与协作
 - 提交信息遵循 Conventional Commits，例如 `feat: add thermal preprocessor`。

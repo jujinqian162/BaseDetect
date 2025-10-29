@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Operational scripts now stay in `scripts/` (`train.py`, `predict.py`), while reusable code sits in the lightweight `basedetect/` package (`uv run --module basedetect` for smoke tests). Dataset configs live in `configs/`, datasets are grouped under `datasets/` (`datasets2/`, `datasets-initial/`, `demo/`), demo clips in `test/`, and generated assets collect in `artifacts/` (`runs/`, `outputs/`). Pretrained checkpoints are grouped beneath `weights/pretrained/` for clarity.
+Operational scripts now stay in `scripts/` (`train.py`, `predict.py`), while reusable code sits in the lightweight `basedetect/` package (`uv run --module basedetect` for smoke tests). Dataset configs live in `configs/`, datasets are grouped under `datasets/` (`datasets2/`, `datasets-initial/`), demo clips in `test/`, and generated assets collect in `artifacts/` (`runs/`, `outputs/`). Pretrained checkpoints are grouped beneath `weights/pretrained/` for clarity.
 
 ## Build, Test, and Development Commands
 Install dependencies with `uv sync` (preferred) or `pip install -r requirements.txt`. Typical workflows:

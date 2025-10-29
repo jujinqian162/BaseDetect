@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from basedetect.datasets import ensure_demo_dataset
-from basedetect.paths import ensure_runtime_dirs
+from basedetect.paths import ensure_runtime_dirs, project_root
 
 
 def main() -> None:
     ensure_runtime_dirs()
-    ensure_demo_dataset()
-    print("BaseDetect environment ready. Try `uv run scripts/predict.py`.")
+    default_config = project_root() / "configs" / "data-initial.yaml"
+    print(
+        "BaseDetect environment ready. Default dataset config: "
+        f"{default_config}. Try `uv run scripts/train.py`."
+    )
 
 
 if __name__ == "__main__":

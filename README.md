@@ -13,7 +13,6 @@ BaseDetect/
 ├─ datasets/               # Dataset collections and exports
 │  ├─ datasets2/           # Roboflow export referenced by configs/data.yaml
 │  ├─ datasets-initial/    # Default dataset referenced by configs/data-initial.yaml
-│  └─ demo/                # Synthetic dataset generated via `--config auto`
 ├─ test/                   # Short demo clips for regression checks
 ├─ weights/pretrained/     # Cached YOLO checkpoints
 ├─ artifacts/              # Generated runs/, metrics, and output videos
@@ -34,7 +33,7 @@ Code, configuration, raw data, and generated artifacts live in separate director
   source .venv/bin/activate
   pip install -r requirements.txt
   ```
-- First run: bootstrap folders and the synthetic demo dataset.
+- First run: create runtime directories so inference outputs and checkpoints have a home.
   ```bash
   uv run --module basedetect
   ```
@@ -46,14 +45,12 @@ Code, configuration, raw data, and generated artifacts live in separate director
 3. `uv run scripts/train.py` to fine-tune using `configs/data-initial.yaml`; confirm `artifacts/runs/basedetect/` contains logs and `weights/best.pt`.
 4. `uv run scripts/predict.py` to process `test/test3.mp4` and produce `artifacts/outputs/output.avi`.
 
-Need a lightweight demo dataset instead? Run `uv run --module basedetect` to populate `datasets/demo/`, then launch training with `uv run scripts/train.py --config auto`.
-
 ## Training Workflow
 Run the training CLI:
 ```bash
 uv run scripts/train.py [options]
 ```
-- `--config PATH` — dataset YAML. Defaults to `configs/data-initial.yaml`; pass `'auto'` to build a demo dataset at `datasets/demo/data.yaml`.
+- `--config PATH` — dataset YAML. Defaults to `configs/data-initial.yaml`.
 - `--model SOURCE` — initial weights (file path or Ultralytics model name). Defaults to `weights/pretrained/yolov8n.pt`.
 - `--epochs / --batch / --imgsz` — standard hyperparameters with defaults `10`, `8`, and `640`.
 - `--device` — Ultralytics device string; `auto` prefers the first GPU when CUDA is available.
@@ -98,14 +95,13 @@ uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --
 ## Data & Configuration Management
 - `configs/` stores dataset descriptors and experiment settings. `configs/data-initial.yaml` (default) points to `datasets/datasets-initial/`, while `configs/data.yaml` references the Roboflow export under `datasets/datasets2/`. Copy either when creating new variants and adjust paths accordingly.
 - Place all dataset exports under `datasets/` (e.g., `datasets/custom_v1/`). Each dataset folder should contain `train/`, `valid/`, and `test/` subdirectories that match the YAML paths.
-- Synthetic demo data lives in `datasets/demo/`. Regenerate it anytime with `uv run --module basedetect`.
 - Keep large assets (datasets, artifacts) out of commits—double-check `git status` before pushing.
 
 ## Manual Validation
 - `uv run scripts/predict.py` and confirm `artifacts/outputs/output.avi` updates, contains detections, and prints a yellow bilingual warning only when auto-falling back to pretrained weights.
 - Repeat inference for each clip in `test/` to ensure different resolutions behave correctly.
 - After training changes, record fresh metrics from `artifacts/runs/<run_name>/results.csv`; grab loss/precision plots when useful for reviews.
-- Whenever CLI argument parsing or default paths change, run `uv run scripts/test_cli.py` for parameter smoke tests and `uv run --module basedetect` to confirm demo data still initializes correctly.
+- Whenever CLI argument parsing or default paths change, run `uv run scripts/test_cli.py` for parameter smoke tests and `uv run --module basedetect` to confirm runtime directories are ready.
 
 ## Troubleshooting
 - **Falls back to CPU** — check `CUDA_VISIBLE_DEVICES` and `nvidia-smi`. Pass `--device 0` explicitly if the environment masks GPUs.

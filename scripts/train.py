@@ -12,7 +12,6 @@ if str(REPO_ROOT) not in sys.path:
 import torch
 from ultralytics import YOLO
 
-from basedetect.datasets import ensure_demo_dataset
 from basedetect.paths import ensure_runtime_dirs, pretrained_dir, project_root, runs_dir
 
 
@@ -50,11 +49,7 @@ DEFAULT_CONFIG = "configs/data-initial.yaml"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a YOLO model for BaseDetect.")
-    parser.add_argument(
-        "--config",
-        default=DEFAULT_CONFIG,
-        help="Path to the dataset YAML (pass 'auto' to generate a synthetic demo dataset).",
-    )
+    parser.add_argument("--config", default=DEFAULT_CONFIG, help="Path to the dataset YAML file.")
     parser.add_argument(
         "--model",
         default=str(pretrained_dir() / "yolov8n.pt"),
@@ -87,13 +82,9 @@ def main() -> None:
     args = parse_args()
     ensure_runtime_dirs()
 
-    if args.config == "auto":
-        dataset_root = ensure_demo_dataset()
-        config_path = dataset_root / "data.yaml"
-    else:
-        config_path = resolve_path(args.config)
-        if not config_path.exists():
-            raise FileNotFoundError(f"Dataset config not found: {config_path}")
+    config_path = resolve_path(args.config)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Dataset config not found: {config_path}")
 
     model_path = resolve_path(args.model)
     if model_path.exists():

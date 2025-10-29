@@ -1,6 +1,0 @@
-train: /home/jujinqian/CODE/python/BaseDetect/datasets/demo/train/images
-val: /home/jujinqian/CODE/python/BaseDetect/datasets/demo/valid/images
-test: /home/jujinqian/CODE/python/BaseDetect/datasets/demo/test/images
-
-nc: 1
-names: ['base']
