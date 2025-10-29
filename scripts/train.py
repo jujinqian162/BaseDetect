@@ -20,26 +20,11 @@ YELLOW = "\033[33m"
 RESET = "\033[0m"
 
 
-def _is_pretrained(path_or_name: Path | str) -> bool:
-    if isinstance(path_or_name, Path):
-        try:
-            return path_or_name.resolve().is_relative_to(pretrained_dir().resolve())
-        except AttributeError:
-            try:
-                path_or_name.resolve().relative_to(pretrained_dir().resolve())
-                return True
-            except ValueError:
-                return False
-    candidate = Path(str(path_or_name)).name
-    return candidate.startswith("yolov")
-
-
-def warn_pretrained_usage(source: Path | str) -> None:
+def warn_cpu_training() -> None:
     LOGGER.warning(
-        "%s⚠️ 警告：正在使用预训练权重 %s。\n⚠️ Warning: Training with pretrained weights %s.%s",
+        "%s⚠️ 警告：没有检测到 CUDA，将在 CPU 上训练。\n"
+        "⚠️ Warning: CUDA unavailable; training will run on CPU.%s",
         YELLOW,
-        source,
-        source,
         RESET,
     )
 
@@ -89,17 +74,14 @@ def main() -> None:
     model_path = resolve_path(args.model)
     if model_path.exists():
         model_source = str(model_path)
-        using_pretrained = _is_pretrained(model_path)
     else:
         model_source = args.model
-        using_pretrained = _is_pretrained(model_source)
-
-    if using_pretrained:
-        warn_pretrained_usage(model_source)
 
     device = args.device
     if device == "auto":
         device = "0" if torch.cuda.is_available() else "cpu"
+        if device == "cpu":
+            warn_cpu_training()
 
     model = YOLO(model_source)
     model.train(

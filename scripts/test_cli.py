@@ -39,7 +39,8 @@ class TrainCLISmoke(TestCase):
         called_kwargs = mock_model.train.call_args.kwargs
         self.assertIn("data", called_kwargs)
         self.assertTrue(str(called_kwargs["data"]).endswith("configs/data-initial.yaml"))
-        self.assertTrue(any("预训练" in entry for entry in log_ctx.output))
+        self.assertTrue(any("没有检测到 CUDA" in entry for entry in log_ctx.output))
+        self.assertTrue(any("CUDA unavailable" in entry for entry in log_ctx.output))
 
     def test_missing_config_raises(self) -> None:
         argv = ["scripts/train.py", "--config", "definitely_missing.yaml"]
@@ -49,10 +50,10 @@ class TrainCLISmoke(TestCase):
             with self.assertRaises(FileNotFoundError):
                 train_module.main()
 
-    @mock.patch("scripts.train.warn_pretrained_usage")
-    @mock.patch("scripts.train.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.train.warn_cpu_training")
+    @mock.patch("scripts.train.torch.cuda.is_available", return_value=True)
     @mock.patch("scripts.train.YOLO")
-    def test_custom_weights_no_pretrained_warning(
+    def test_custom_weights_no_cpu_warning(
         self,
         mock_yolo: mock.Mock,
         _: mock.Mock,
