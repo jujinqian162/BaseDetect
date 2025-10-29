@@ -1,5 +1,7 @@
 # BaseDetect
 
+> 本项目除训练集全部由 AI 生成。
+
 [中文文档](README.zh.md)
 
 BaseDetect packages a YOLOv8-based workflow for detecting and tracking machine bases in monochrome video feeds. The repository ships training and inference scripts, a smoke-test dataset, pretrained checkpoints, and sample footage so you can validate the pipeline quickly and iterate on your own data.
