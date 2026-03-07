@@ -38,6 +38,11 @@ def pretrained_dir() -> Path:
     return weights_dir() / "pretrained"
 
 
+def camera_config() -> Path:
+    """Default camera parameter configuration file."""
+    return configs_dir() / "camera.yaml"
+
+
 def ensure_runtime_dirs() -> None:
     """Create directories produced during normal workflows."""
     outputs_dir().mkdir(parents=True, exist_ok=True)

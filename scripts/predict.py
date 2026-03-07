@@ -13,7 +13,15 @@ import cv2
 import torch
 from ultralytics import YOLO
 
-from basedetect.paths import ensure_runtime_dirs, outputs_dir, pretrained_dir, project_root, runs_dir
+from basedetect.paths import (
+    camera_config,
+    ensure_runtime_dirs,
+    outputs_dir,
+    pretrained_dir,
+    project_root,
+    runs_dir,
+)
+from basedetect.coord3d import load_camera_config, pixel_to_3d
 
 
 LOGGER = logging.getLogger(__name__)
@@ -52,7 +60,9 @@ def _warn_pretrained(target: str) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run BaseDetect tracking on a video source.")
+    parser = argparse.ArgumentParser(
+        description="Run BaseDetect tracking on a video source."
+    )
     parser.add_argument(
         "--weights",
         default="auto",
@@ -68,7 +78,9 @@ def parse_args() -> argparse.Namespace:
         default=str(outputs_dir() / "output.avi"),
         help="Path to save the annotated video.",
     )
-    parser.add_argument("--device", default="auto", help="Device passed to Ultralytics inference.")
+    parser.add_argument(
+        "--device", default="auto", help="Device passed to Ultralytics inference."
+    )
     parser.add_argument(
         "--conf",
         type=float,
@@ -87,7 +99,18 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Disable on-screen display of annotated frames.",
     )
-    parser.set_defaults(save=True, show=True)
+    parser.add_argument(
+        "--camera-config",
+        default=str(camera_config()),
+        help="Path to camera parameter YAML for 3D coordinate estimation.",
+    )
+    parser.add_argument(
+        "--no-coord3d",
+        dest="coord3d",
+        action="store_false",
+        help="Disable 3D coordinate estimation.",
+    )
+    parser.set_defaults(save=True, show=True, coord3d=True)
     return parser.parse_args()
 
 
@@ -130,6 +153,13 @@ def main() -> None:
     args = parse_args()
     ensure_runtime_dirs()
 
+    # ---- logging ----------------------------------------------------------
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
     weights = resolve_weights(args.weights)
     model = YOLO(weights)
 
@@ -141,6 +171,28 @@ def main() -> None:
     fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 640
+
+    # ---- 3D coordinate estimation setup -----------------------------------
+    intrinsics = None
+    target_spec = None
+    if args.coord3d:
+        try:
+            intrinsics, target_spec = load_camera_config(args.camera_config)
+            # Warn if video resolution differs from config
+            if width != intrinsics.image_width or height != intrinsics.image_height:
+                LOGGER.warning(
+                    "Video resolution (%dx%d) differs from camera config (%dx%d). "
+                    "3D estimates may be inaccurate.",
+                    width,
+                    height,
+                    intrinsics.image_width,
+                    intrinsics.image_height,
+                )
+            LOGGER.info("3D coordinate estimation enabled")
+        except Exception:
+            LOGGER.exception("Failed to load camera config; 3D estimation disabled")
+            intrinsics = None
+            target_spec = None
 
     device = args.device
     if device == "auto":
@@ -154,6 +206,7 @@ def main() -> None:
         writer = cv2.VideoWriter(str(output_path), fourcc, fps or 25.0, (width, height))
 
     window_name = "BaseDetect Tracking"
+    frame_idx = 0
 
     try:
         while True:
@@ -173,6 +226,57 @@ def main() -> None:
 
             annotated = results[0].plot()
 
+            # ---- 3D coordinate estimation per detection -------------------
+            if intrinsics is not None and target_spec is not None:
+                boxes = results[0].boxes
+                if boxes is not None and len(boxes) > 0:
+                    for i in range(len(boxes)):
+                        x1, y1, x2, y2 = boxes.xyxy[i].tolist()
+                        bbox_w = x2 - x1
+                        bbox_h = y2 - y1
+                        bbox_cx = (x1 + x2) / 2.0
+                        bbox_cy = (y1 + y2) / 2.0
+
+                        pos = pixel_to_3d(
+                            intrinsics,
+                            target_spec,
+                            bbox_cx,
+                            bbox_cy,
+                            bbox_w,
+                            bbox_h,
+                        )
+
+                        track_id = int(boxes.id[i]) if boxes.id is not None else -1
+                        conf = float(boxes.conf[i])
+
+                        LOGGER.info(
+                            "frame=%d track=#%d conf=%.2f "
+                            "bbox=(%.0f,%.0f,%.0fx%.0f) %s",
+                            frame_idx,
+                            track_id,
+                            conf,
+                            bbox_cx,
+                            bbox_cy,
+                            bbox_w,
+                            bbox_h,
+                            pos.format(),
+                        )
+
+                        # Draw 3D coordinates next to the bounding box
+                        label_3d = f"({pos.x:+.2f},{pos.y:.2f},{pos.z:+.2f})"
+                        text_x = int(x2) + 6
+                        text_y = int(y1) + 22
+                        cv2.putText(
+                            annotated,
+                            label_3d,
+                            (text_x, text_y),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (255, 0, 0),
+                            2,
+                            cv2.LINE_AA,
+                        )
+
             if writer is not None:
                 writer.write(annotated)
 
@@ -180,12 +284,15 @@ def main() -> None:
                 cv2.imshow(window_name, annotated)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
+
+            frame_idx += 1
     finally:
         cap.release()
         if writer is not None:
             writer.release()
         if args.show:
             cv2.destroyAllWindows()
+        LOGGER.info("Processed %d frames", frame_idx)
 
 
 if __name__ == "__main__":
