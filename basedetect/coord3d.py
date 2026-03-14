@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -179,6 +179,35 @@ def load_camera_config(config_path: str | Path) -> tuple[CameraIntrinsics, Targe
     )
 
     return intrinsics, target
+
+
+def scale_intrinsics(
+    intrinsics: CameraIntrinsics,
+    image_width: int,
+    image_height: int,
+) -> CameraIntrinsics:
+    """Scale intrinsics from calibration resolution to runtime resolution."""
+    if image_width <= 0 or image_height <= 0:
+        raise ValueError("Runtime image size must be positive.")
+
+    if (
+        image_width == intrinsics.image_width
+        and image_height == intrinsics.image_height
+    ):
+        return intrinsics
+
+    scale_x = image_width / intrinsics.image_width
+    scale_y = image_height / intrinsics.image_height
+
+    return replace(
+        intrinsics,
+        fx=intrinsics.fx * scale_x,
+        fy=intrinsics.fy * scale_y,
+        cx=intrinsics.cx * scale_x,
+        cy=intrinsics.cy * scale_y,
+        image_width=image_width,
+        image_height=image_height,
+    )
 
 
 # ---------------------------------------------------------------------------

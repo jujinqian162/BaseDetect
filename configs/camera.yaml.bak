@@ -1,0 +1,39 @@
+# =============================================================================
+# BaseDetect 相机与目标参数配置
+# Camera and target parameter configuration for 3D coordinate estimation
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# 相机参数 (Camera parameters)
+# ---------------------------------------------------------------------------
+camera:
+  # 图像分辨率 — 必须与实际视频帧分辨率一致
+  # Image resolution — must match the actual video frame resolution
+  image_width: 1920
+  image_height: 1080
+
+  # 水平视场角 (度) — 垂直 FOV 会根据宽高比自动计算
+  # Horizontal field of view (degrees) — vertical FOV is derived from aspect ratio
+  # horizontal_fov: 60.0
+
+  # 如果有精确标定结果，取消注释下面的参数（优先级高于 FOV）
+  # If you have calibration results, uncomment below (takes priority over FOV)
+  fx: 1289.774835
+  fy: 1290.538838
+  cx: 924.328363
+  cy: 516.553714
+# ---------------------------------------------------------------------------
+# 目标物理参数 (Target physical dimensions)
+# ---------------------------------------------------------------------------
+target:
+  # 矛头底座的实际物理尺寸，单位：厘米 (cm)
+  # Physical size of the base, unit: centimeters (cm)
+  base_width: 2.7
+  base_height: 2.4
+
+  # 距离估算使用的维度: "width" | "height" | "average"
+  #   width   — 仅用宽度估算距离
+  #   height  — 仅用高度估算距离
+  #   average — 宽度和高度各估算一次，取平均值（推荐，可降低 bbox 回归误差）
+  # Dimension used for distance estimation
+  distance_method: "average"

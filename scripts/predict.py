@@ -21,7 +21,7 @@ from basedetect.paths import (
     project_root,
     runs_dir,
 )
-from basedetect.coord3d import load_camera_config, pixel_to_3d
+from basedetect.coord3d import load_camera_config, pixel_to_3d, scale_intrinsics
 
 
 LOGGER = logging.getLogger(__name__)
@@ -178,16 +178,16 @@ def main() -> None:
     if args.coord3d:
         try:
             intrinsics, target_spec = load_camera_config(args.camera_config)
-            # Warn if video resolution differs from config
             if width != intrinsics.image_width or height != intrinsics.image_height:
                 LOGGER.warning(
                     "Video resolution (%dx%d) differs from camera config (%dx%d). "
-                    "3D estimates may be inaccurate.",
+                    "Scaling intrinsics to match runtime frames.",
                     width,
                     height,
                     intrinsics.image_width,
                     intrinsics.image_height,
                 )
+                intrinsics = scale_intrinsics(intrinsics, width, height)
             LOGGER.info("3D coordinate estimation enabled")
         except Exception:
             LOGGER.exception("Failed to load camera config; 3D estimation disabled")

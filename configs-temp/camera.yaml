@@ -1,0 +1,15 @@
+camera:
+  image_width: 640
+  image_height: 480
+  fx: 657.13299
+  fy: 657.004538
+  cx: 301.772867
+  cy: 253.594519
+  dist_coeffs:
+  - -0.0148615
+  - 0.08118572
+  - -0.00017047
+  - -0.00042592
+  - -0.19599821
+  rms_reprojection_error: 0.13320312
+  mean_reprojection_error: 0.01397886

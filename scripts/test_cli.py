@@ -14,11 +14,57 @@ from types import SimpleNamespace
 from unittest import TestCase, main, mock
 
 import numpy as np
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+
+class Coord3DUnitTests(TestCase):
+    def test_scale_intrinsics_preserves_depth_across_resolution_change(self) -> None:
+        from basedetect.coord3d import CameraIntrinsics, TargetSpec, pixel_to_3d, scale_intrinsics
+
+        intrinsics = CameraIntrinsics(
+            fx=1200.0,
+            fy=1200.0,
+            cx=960.0,
+            cy=540.0,
+            image_width=1920,
+            image_height=1080,
+        )
+        target = TargetSpec(
+            base_width_m=0.027,
+            base_height_m=0.024,
+            distance_method="average",
+        )
+
+        full_res_pos = pixel_to_3d(
+            intrinsics,
+            target,
+            bbox_cx_px=960.0,
+            bbox_cy_px=540.0,
+            bbox_width_px=100.0,
+            bbox_height_px=100.0,
+        )
+
+        scaled_intrinsics = scale_intrinsics(intrinsics, image_width=960, image_height=540)
+        half_res_pos = pixel_to_3d(
+            scaled_intrinsics,
+            target,
+            bbox_cx_px=480.0,
+            bbox_cy_px=270.0,
+            bbox_width_px=50.0,
+            bbox_height_px=50.0,
+        )
+
+        self.assertAlmostEqual(scaled_intrinsics.fx, 600.0)
+        self.assertAlmostEqual(scaled_intrinsics.fy, 600.0)
+        self.assertAlmostEqual(scaled_intrinsics.cx, 480.0)
+        self.assertAlmostEqual(scaled_intrinsics.cy, 270.0)
+        self.assertAlmostEqual(half_res_pos.y, full_res_pos.y)
+
 
 
 class TrainCLISmoke(TestCase):
@@ -216,6 +262,172 @@ class PredictCLISmoke(TestCase):
 
         mock_imshow.assert_not_called()
         mock_destroy.assert_not_called()
+
+
+class CalibrationCLISmoke(TestCase):
+    @mock.patch("scripts.calibration.resolve_image_paths")
+    @mock.patch("scripts.calibration.calibrate_chessboard")
+    def test_chessboard_calibration_writes_yaml(
+        self,
+        mock_calibrate: mock.Mock,
+        mock_resolve: mock.Mock,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            input_dir = tmp_path / "images"
+            input_dir.mkdir()
+            image_paths = [input_dir / f"frame_{i}.jpg" for i in range(3)]
+            for image_path in image_paths:
+                image_path.write_text("dummy")
+
+            output_path = tmp_path / "camera.yaml"
+            mock_resolve.return_value = image_paths
+            mock_calibrate.return_value = SimpleNamespace(
+                rms=0.12,
+                camera_matrix=np.array(
+                    [[1000.0, 0.0, 960.0], [0.0, 1005.0, 540.0], [0.0, 0.0, 1.0]],
+                    dtype=np.float64,
+                ),
+                dist_coeffs=np.array([[0.1], [-0.2], [0.001], [0.002], [0.03]], dtype=np.float64),
+                image_width=1920,
+                image_height=1080,
+                per_view_errors=[0.11, 0.13, 0.12],
+                valid_images=image_paths,
+                fx=1000.0,
+                fy=1005.0,
+                cx=960.0,
+                cy=540.0,
+            )
+
+            argv = [
+                "scripts/calibration.py",
+                "--input",
+                str(input_dir),
+                "--output",
+                str(output_path),
+            ]
+            with mock.patch.object(sys, "argv", argv):
+                from scripts import calibration as calibration_module
+
+                calibration_module.main()
+
+            saved = yaml.safe_load(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["camera"]["image_width"], 1920)
+            self.assertEqual(saved["camera"]["image_height"], 1080)
+            self.assertAlmostEqual(saved["camera"]["fx"], 1000.0)
+            self.assertAlmostEqual(saved["camera"]["fy"], 1005.0)
+            self.assertEqual(len(saved["camera"]["dist_coeffs"]), 5)
+            mock_calibrate.assert_called_once()
+
+
+class CalibrationVideoCLISmoke(TestCase):
+    @mock.patch("scripts.calibration_video.cv2.VideoCapture")
+    @mock.patch("scripts.calibration_video.cv2.calibrateCamera")
+    @mock.patch("scripts.calibration_video.compute_reprojection_errors", return_value=[0.2, 0.2, 0.2])
+    def test_video_calibration_writes_report_and_yaml(
+        self,
+        _mock_reprojection: mock.Mock,
+        mock_calibrate_camera: mock.Mock,
+        mock_video_capture: mock.Mock,
+    ) -> None:
+        frame = np.zeros((80, 120, 3), dtype=np.uint8)
+        capture_instance = mock_video_capture.return_value
+        capture_instance.isOpened.return_value = True
+        capture_instance.read.side_effect = [(True, frame), (True, frame), (True, frame), (False, frame)]
+        capture_instance.get.return_value = 100.0
+
+        fake_corners = np.zeros((54, 1, 2), dtype=np.float32)
+        mock_calibrate_camera.return_value = (
+            0.2,
+            np.array([[900.0, 0.0, 60.0], [0.0, 910.0, 40.0], [0.0, 0.0, 1.0]], dtype=np.float64),
+            np.array([[0.01], [-0.02], [0.001], [0.002], [0.03]], dtype=np.float64),
+            [np.zeros((3, 1), dtype=np.float64)] * 3,
+            [np.zeros((3, 1), dtype=np.float64)] * 3,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            video_path = tmp_path / "sample.mp4"
+            video_path.write_text("dummy")
+            output_path = tmp_path / "camera.yaml"
+            report_path = tmp_path / "report.csv"
+
+            argv = [
+                "scripts/calibration_video.py",
+                "--input",
+                str(video_path),
+                "--output",
+                str(output_path),
+                "--report",
+                str(report_path),
+                "--max-frames",
+                "3",
+            ]
+            with mock.patch.object(sys, "argv", argv):
+                with mock.patch("scripts.calibration_video.detect_chessboard_in_frame") as mock_detect:
+                    from scripts import calibration_video as calibration_video_module
+
+                    mock_detect.side_effect = [
+                        (
+                            fake_corners,
+                            calibration_video_module.FrameRecord(
+                                frame_index=0,
+                                timestamp_ms=0.0,
+                                success=True,
+                                pattern="chessboard",
+                                image_width=120,
+                                image_height=80,
+                                points_count=54,
+                                marker_count=0,
+                                reason="ok",
+                            ),
+                        ),
+                        (
+                            fake_corners,
+                            calibration_video_module.FrameRecord(
+                                frame_index=1,
+                                timestamp_ms=0.0,
+                                success=True,
+                                pattern="chessboard",
+                                image_width=120,
+                                image_height=80,
+                                points_count=54,
+                                marker_count=0,
+                                reason="ok",
+                            ),
+                        ),
+                        (
+                            fake_corners,
+                            calibration_video_module.FrameRecord(
+                                frame_index=2,
+                                timestamp_ms=0.0,
+                                success=True,
+                                pattern="chessboard",
+                                image_width=120,
+                                image_height=80,
+                                points_count=54,
+                                marker_count=0,
+                                reason="ok",
+                            ),
+                        ),
+                    ]
+
+                    calibration_video_module.main()
+
+            saved = yaml.safe_load(output_path.read_text(encoding="utf-8"))
+            report_text = report_path.read_text(encoding="utf-8")
+            self.assertAlmostEqual(saved["camera"]["fx"], 900.0)
+            self.assertAlmostEqual(saved["camera"]["fy"], 910.0)
+            self.assertIn("frame_index", report_text)
+            self.assertIn("ok", report_text)
+            self.assertIn("reprojection_error", report_text)
+            self.assertIn("used_in_calibration", report_text)
+            self.assertIn("0.2", report_text)
+            self.assertGreaterEqual(report_text.count("True"), 1)
+            capture_instance.release.assert_called_once()
+
+
+class PredictCLIAdditionalSmoke(TestCase):
 
     @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
     @mock.patch("scripts.predict.ensure_runtime_dirs")
