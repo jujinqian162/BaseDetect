@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import os
 from pathlib import Path
 import sys
 import logging
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -21,7 +24,12 @@ from basedetect.paths import (
     project_root,
     runs_dir,
 )
-from basedetect.coord3d import load_camera_config, pixel_to_3d, scale_intrinsics
+from basedetect.coord3d import (
+    load_apriltag_config,
+    load_camera_config,
+    pixel_to_3d,
+    scale_intrinsics,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -110,6 +118,22 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Disable 3D coordinate estimation.",
     )
+    parser.add_argument(
+        "--apriltag",
+        action="store_true",
+        help="Use AprilTag detection + pose estimation instead of YOLO bbox 3D estimation.",
+    )
+    parser.add_argument(
+        "--apriltag-family",
+        default=None,
+        help="AprilTag family used when --apriltag is enabled.",
+    )
+    parser.add_argument(
+        "--apriltag-size",
+        type=float,
+        default=None,
+        help="Physical AprilTag edge length in meters when --apriltag is enabled.",
+    )
     parser.set_defaults(save=True, show=True, coord3d=True)
     return parser.parse_args()
 
@@ -149,6 +173,25 @@ def resolve_source(source: str) -> str | int:
     return source
 
 
+def _create_apriltag_detector(family: str) -> Any:
+    try:
+        apriltag_module = importlib.import_module("apriltag")
+    except ImportError as exc:
+        raise RuntimeError(
+            "AprilTag mode requested, but module 'apriltag' is not available in the active environment."
+        ) from exc
+
+    detector_factory = getattr(apriltag_module, "apriltag", None)
+    if detector_factory is None:
+        raise RuntimeError("Loaded apriltag module does not expose apriltag().")
+
+    return detector_factory(family, threads=max(1, os.cpu_count() or 1))
+
+
+def _camera_to_user_frame(x_cam: float, y_cam: float, z_cam: float) -> tuple[float, float, float]:
+    return x_cam, z_cam, -y_cam
+
+
 def main() -> None:
     args = parse_args()
     ensure_runtime_dirs()
@@ -160,8 +203,10 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
 
-    weights = resolve_weights(args.weights)
-    model = YOLO(weights)
+    model = None
+    if not args.apriltag:
+        weights = resolve_weights(args.weights)
+        model = YOLO(weights)
 
     source = resolve_source(args.source)
     cap = cv2.VideoCapture(source)
@@ -175,7 +220,36 @@ def main() -> None:
     # ---- 3D coordinate estimation setup -----------------------------------
     intrinsics = None
     target_spec = None
-    if args.coord3d:
+    apriltag_detector = None
+    if args.apriltag:
+        try:
+            apriltag_spec = load_apriltag_config(args.camera_config)
+            if args.apriltag_family is None:
+                args.apriltag_family = apriltag_spec.family
+            if args.apriltag_size is None:
+                args.apriltag_size = apriltag_spec.tag_size_m
+            if args.apriltag_size <= 0:
+                raise ValueError("--apriltag-size must be positive.")
+            intrinsics, _ = load_camera_config(args.camera_config)
+            if width != intrinsics.image_width or height != intrinsics.image_height:
+                LOGGER.warning(
+                    "Video resolution (%dx%d) differs from camera config (%dx%d). "
+                    "Scaling intrinsics to match runtime frames.",
+                    width,
+                    height,
+                    intrinsics.image_width,
+                    intrinsics.image_height,
+                )
+                intrinsics = scale_intrinsics(intrinsics, width, height)
+            apriltag_detector = _create_apriltag_detector(args.apriltag_family)
+            LOGGER.info(
+                "AprilTag pose estimation enabled (family=%s size=%.3fm)",
+                args.apriltag_family,
+                args.apriltag_size,
+            )
+        except Exception as exc:
+            raise RuntimeError("Failed to initialize AprilTag pose estimation.") from exc
+    elif args.coord3d:
         try:
             intrinsics, target_spec = load_camera_config(args.camera_config)
             if width != intrinsics.image_width or height != intrinsics.image_height:
@@ -202,7 +276,7 @@ def main() -> None:
     if args.save:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fourcc = cv2.VideoWriter_fourcc(*"XVID")
+        fourcc = getattr(cv2, "VideoWriter_fourcc")(*"XVID")
         writer = cv2.VideoWriter(str(output_path), fourcc, fps or 25.0, (width, height))
 
     window_name = "BaseDetect Tracking"
@@ -215,67 +289,124 @@ def main() -> None:
                 break
 
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            gray_rgb = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+            if args.apriltag:
+                if apriltag_detector is None or intrinsics is None:
+                    raise RuntimeError("AprilTag detector is not initialized.")
+                annotated = frame.copy()
+                detections = apriltag_detector.detect(gray)
+                for detection in detections:
+                    pose = apriltag_detector.estimate_tag_pose(
+                        detection,
+                        args.apriltag_size,
+                        intrinsics.fx,
+                        intrinsics.fy,
+                        intrinsics.cx,
+                        intrinsics.cy,
+                    )
 
-            results = model.track(
-                gray_rgb,
-                persist=True,
-                device=device,
-                conf=args.conf,
-            )
+                    center = detection["center"]
+                    corners = detection["lb-rb-rt-lt"]
+                    tag_id = int(detection["id"])
+                    margin = float(detection.get("margin", 0.0))
+                    reproj_error = float(pose.get("error", 0.0))
+                    translation = pose["t"].reshape(-1)
+                    x_user, y_user, z_user = _camera_to_user_frame(
+                        float(translation[0]),
+                        float(translation[1]),
+                        float(translation[2]),
+                    )
 
-            annotated = results[0].plot()
+                    LOGGER.info(
+                        "frame=%d tag_id=%d center=(%.1f,%.1f) margin=%.2f reproj=%.4f "
+                        "X=%+.3fm Y=%.3fm Z=%+.3fm",
+                        frame_idx,
+                        tag_id,
+                        float(center[0]),
+                        float(center[1]),
+                        margin,
+                        reproj_error,
+                        x_user,
+                        y_user,
+                        z_user,
+                    )
 
-            # ---- 3D coordinate estimation per detection -------------------
-            if intrinsics is not None and target_spec is not None:
-                boxes = results[0].boxes
-                if boxes is not None and len(boxes) > 0:
-                    for i in range(len(boxes)):
-                        x1, y1, x2, y2 = boxes.xyxy[i].tolist()
-                        bbox_w = x2 - x1
-                        bbox_h = y2 - y1
-                        bbox_cx = (x1 + x2) / 2.0
-                        bbox_cy = (y1 + y2) / 2.0
+                    poly = corners.astype(int).reshape((-1, 1, 2))
+                    center_xy = tuple(center.astype(int))
+                    cv2.polylines(annotated, [poly], True, (0, 255, 0), 2)
+                    cv2.circle(annotated, center_xy, 4, (0, 0, 255), -1)
+                    cv2.putText(
+                        annotated,
+                        f"tag#{tag_id} ({x_user:+.2f},{y_user:.2f},{z_user:+.2f})",
+                        (center_xy[0] + 8, center_xy[1] - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 0, 0),
+                        2,
+                        cv2.LINE_AA,
+                    )
+            else:
+                if model is None:
+                    raise RuntimeError("YOLO model is not initialized.")
+                gray_rgb = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
-                        pos = pixel_to_3d(
-                            intrinsics,
-                            target_spec,
-                            bbox_cx,
-                            bbox_cy,
-                            bbox_w,
-                            bbox_h,
-                        )
+                results = model.track(
+                    gray_rgb,
+                    persist=True,
+                    device=device,
+                    conf=args.conf,
+                )
 
-                        track_id = int(boxes.id[i]) if boxes.id is not None else -1
-                        conf = float(boxes.conf[i])
+                annotated = results[0].plot()
 
-                        LOGGER.info(
-                            "frame=%d track=#%d conf=%.2f "
-                            "bbox=(%.0f,%.0f,%.0fx%.0f) %s",
-                            frame_idx,
-                            track_id,
-                            conf,
-                            bbox_cx,
-                            bbox_cy,
-                            bbox_w,
-                            bbox_h,
-                            pos.format(),
-                        )
+                # ---- 3D coordinate estimation per detection -------------------
+                if intrinsics is not None and target_spec is not None:
+                    boxes = results[0].boxes
+                    if boxes is not None and len(boxes) > 0:
+                        for i in range(len(boxes)):
+                            x1, y1, x2, y2 = boxes.xyxy[i].tolist()
+                            bbox_w = x2 - x1
+                            bbox_h = y2 - y1
+                            bbox_cx = (x1 + x2) / 2.0
+                            bbox_cy = (y1 + y2) / 2.0
 
-                        # Draw 3D coordinates next to the bounding box
-                        label_3d = f"({pos.x:+.2f},{pos.y:.2f},{pos.z:+.2f})"
-                        text_x = int(x2) + 6
-                        text_y = int(y1) + 22
-                        cv2.putText(
-                            annotated,
-                            label_3d,
-                            (text_x, text_y),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.7,
-                            (255, 0, 0),
-                            2,
-                            cv2.LINE_AA,
-                        )
+                            pos = pixel_to_3d(
+                                intrinsics,
+                                target_spec,
+                                bbox_cx,
+                                bbox_cy,
+                                bbox_w,
+                                bbox_h,
+                            )
+
+                            track_id = int(boxes.id[i]) if boxes.id is not None else -1
+                            conf = float(boxes.conf[i])
+
+                            LOGGER.info(
+                                "frame=%d track=#%d conf=%.2f "
+                                "bbox=(%.0f,%.0f,%.0fx%.0f) %s",
+                                frame_idx,
+                                track_id,
+                                conf,
+                                bbox_cx,
+                                bbox_cy,
+                                bbox_w,
+                                bbox_h,
+                                pos.format(),
+                            )
+
+                            label_3d = f"({pos.x:+.2f},{pos.y:.2f},{pos.z:+.2f})"
+                            text_x = int(x2) + 6
+                            text_y = int(y1) + 22
+                            cv2.putText(
+                                annotated,
+                                label_3d,
+                                (text_x, text_y),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.7,
+                                (255, 0, 0),
+                                2,
+                                cv2.LINE_AA,
+                            )
 
             if writer is not None:
                 writer.write(annotated)

@@ -436,6 +436,82 @@ class PredictCLIAdditionalSmoke(TestCase):
     @mock.patch("scripts.predict.cv2.imshow")
     @mock.patch("scripts.predict.cv2.VideoWriter")
     @mock.patch("scripts.predict.cv2.VideoCapture")
+    @mock.patch("scripts.predict._create_apriltag_detector")
+    @mock.patch("scripts.predict.load_camera_config")
+    @mock.patch("scripts.predict.load_apriltag_config")
+    @mock.patch("scripts.predict.YOLO")
+    def test_apriltag_mode_logs_pose_and_skips_yolo(
+        self,
+        mock_yolo: mock.Mock,
+        mock_load_apriltag_config: mock.Mock,
+        mock_load_camera_config: mock.Mock,
+        mock_create_apriltag_detector: mock.Mock,
+        mock_video_capture: mock.Mock,
+        _writer: mock.Mock,
+        _imshow: mock.Mock,
+        _wait: mock.Mock,
+        _destroy: mock.Mock,
+        _ensure_dirs: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        frame = np.zeros((32, 32, 3), dtype=np.uint8)
+        capture_instance = mock_video_capture.return_value
+        capture_instance.isOpened.return_value = True
+        capture_instance.read.side_effect = [(True, frame), (False, frame)]
+
+        detection = {
+            "id": 7,
+            "center": np.array([16.0, 18.0], dtype=np.float32),
+            "lb-rb-rt-lt": np.array(
+                [[10.0, 22.0], [22.0, 22.0], [22.0, 10.0], [10.0, 10.0]],
+                dtype=np.float32,
+            ),
+            "margin": 55.0,
+        }
+        detector = mock.Mock()
+        detector.detect.return_value = [detection]
+        detector.estimate_tag_pose.return_value = {
+            "t": np.array([[0.1], [0.2], [1.5]], dtype=np.float32),
+            "error": 0.0123,
+        }
+        mock_load_apriltag_config.return_value = SimpleNamespace(
+            family="tag36h11",
+            tag_size_m=0.05,
+        )
+        mock_load_camera_config.return_value = (
+            SimpleNamespace(
+                fx=657.13299,
+                fy=657.004538,
+                cx=301.772867,
+                cy=253.594519,
+                image_width=32,
+                image_height=32,
+            ),
+            None,
+        )
+        mock_create_apriltag_detector.return_value = detector
+
+        argv = ["scripts/predict.py", "--source", "fake.mp4", "--no-save", "--unshow", "--apriltag"]
+        with mock.patch.object(sys, "argv", argv):
+            from scripts import predict as predict_module
+
+            with self.assertLogs("scripts.predict", level="INFO") as log_ctx:
+                predict_module.main()
+
+        mock_yolo.assert_not_called()
+        mock_load_apriltag_config.assert_called_once()
+        detector.detect.assert_called_once()
+        detector.estimate_tag_pose.assert_called_once()
+        self.assertTrue(any("tag_id=7" in entry for entry in log_ctx.output))
+        self.assertTrue(any("X=+0.100m Y=1.500m Z=-0.200m" in entry for entry in log_ctx.output))
+
+    @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.predict.ensure_runtime_dirs")
+    @mock.patch("scripts.predict.cv2.destroyAllWindows")
+    @mock.patch("scripts.predict.cv2.waitKey", return_value=0)
+    @mock.patch("scripts.predict.cv2.imshow")
+    @mock.patch("scripts.predict.cv2.VideoWriter")
+    @mock.patch("scripts.predict.cv2.VideoCapture")
     @mock.patch("scripts.predict.YOLO")
     def test_explicit_pretrained_weights_warns(
         self,

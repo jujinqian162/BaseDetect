@@ -38,3 +38,13 @@ target:
   #   average — 宽度和高度各估算一次，取平均值（推荐，可降低 bbox 回归误差）
   # Dimension used for distance estimation
   distance_method: "average"
+
+# ---------------------------------------------------------------------------
+# AprilTag pose estimation defaults
+# ---------------------------------------------------------------------------
+apriltag:
+  # Tag family used by `scripts/predict.py --apriltag`
+  family: "tag36h11"
+
+  # Physical tag edge length in centimeters. Measure the printed tag carefully.
+  tag_size_cm: 5.0

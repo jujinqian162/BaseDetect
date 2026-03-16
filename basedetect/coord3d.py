@@ -53,6 +53,14 @@ class TargetSpec:
 
 
 @dataclass(frozen=True)
+class AprilTagSpec:
+    """AprilTag detection defaults loaded from camera config."""
+
+    family: str
+    tag_size_m: float
+
+
+@dataclass(frozen=True)
 class Position3D:
     """A 3D position in the user coordinate frame (X-right, Y-forward, Z-up)."""
 
@@ -179,6 +187,30 @@ def load_camera_config(config_path: str | Path) -> tuple[CameraIntrinsics, Targe
     )
 
     return intrinsics, target
+
+
+def load_apriltag_config(config_path: str | Path) -> AprilTagSpec:
+    """Parse the AprilTag section from *camera.yaml*."""
+    config_path = Path(config_path)
+    if not config_path.exists():
+        raise FileNotFoundError(f"Camera config not found: {config_path}")
+
+    with open(config_path, "r", encoding="utf-8") as fh:
+        raw: dict[str, Any] = yaml.safe_load(fh)
+
+    apriltag: dict[str, Any] = raw.get("apriltag", {})
+    family = str(apriltag.get("family", "tag36h11"))
+    tag_size_cm = float(apriltag.get("tag_size_cm", 5.0))
+    if tag_size_cm <= 0:
+        raise ValueError("apriltag.tag_size_cm must be positive.")
+
+    spec = AprilTagSpec(family=family, tag_size_m=_cm_to_m(tag_size_cm))
+    LOGGER.info(
+        "AprilTag spec: family=%s tag_size=%.1fcm",
+        family,
+        tag_size_cm,
+    )
+    return spec
 
 
 def scale_intrinsics(
