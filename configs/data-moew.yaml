@@ -1,0 +1,13 @@
+train: ../datasets/datasets-more/train/images
+val: ../datasets/datasets-more/valid/images
+test: ../datasets/datasets-more/test/images
+
+nc: 2
+names: ['base', 'base2']
+
+roboflow:
+  workspace: robocon-ozkss
+  project: base-inspection-txwpc
+  version: 8
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/robocon-ozkss/base-inspection-txwpc/dataset/8

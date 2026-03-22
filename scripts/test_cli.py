@@ -440,7 +440,7 @@ class PredictCLIAdditionalSmoke(TestCase):
     @mock.patch("scripts.predict.load_camera_config")
     @mock.patch("scripts.predict.load_apriltag_config")
     @mock.patch("scripts.predict.YOLO")
-    def test_apriltag_mode_logs_pose_and_skips_yolo(
+    def test_apriltag_mode_logs_pose_with_base_coords(
         self,
         mock_yolo: mock.Mock,
         mock_load_apriltag_config: mock.Mock,
@@ -458,6 +458,15 @@ class PredictCLIAdditionalSmoke(TestCase):
         capture_instance = mock_video_capture.return_value
         capture_instance.isOpened.return_value = True
         capture_instance.read.side_effect = [(True, frame), (False, frame)]
+
+        track_result = SimpleNamespace(plot=lambda: frame)
+        boxes = SimpleNamespace(
+            xyxy=np.array([[8.0, 8.0, 24.0, 24.0]], dtype=np.float32),
+            id=np.array([3], dtype=np.int32),
+            conf=np.array([0.88], dtype=np.float32),
+        )
+        track_result.boxes = boxes
+        mock_yolo.return_value.track.return_value = [track_result]
 
         detection = {
             "id": 7,
@@ -477,6 +486,7 @@ class PredictCLIAdditionalSmoke(TestCase):
         mock_load_apriltag_config.return_value = SimpleNamespace(
             family="tag36h11",
             tag_size_m=0.05,
+            mirror_input=False,
         )
         mock_load_camera_config.return_value = (
             SimpleNamespace(
@@ -487,7 +497,7 @@ class PredictCLIAdditionalSmoke(TestCase):
                 image_width=32,
                 image_height=32,
             ),
-            None,
+            SimpleNamespace(base_width_m=0.029, base_height_m=0.026, distance_method="average"),
         )
         mock_create_apriltag_detector.return_value = detector
 
@@ -498,10 +508,12 @@ class PredictCLIAdditionalSmoke(TestCase):
             with self.assertLogs("scripts.predict", level="INFO") as log_ctx:
                 predict_module.main()
 
-        mock_yolo.assert_not_called()
+        mock_yolo.assert_called_once()
         mock_load_apriltag_config.assert_called_once()
+        mock_yolo.return_value.track.assert_called_once()
         detector.detect.assert_called_once()
         detector.estimate_tag_pose.assert_called_once()
+        self.assertTrue(any("track=#3" in entry for entry in log_ctx.output))
         self.assertTrue(any("tag_id=7" in entry for entry in log_ctx.output))
         self.assertTrue(any("X=+0.100m Y=1.500m Z=-0.200m" in entry for entry in log_ctx.output))
 

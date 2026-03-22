@@ -29,7 +29,7 @@ camera:
 target:
   # 矛头底座的实际物理尺寸，单位：厘米 (cm)
   # Physical size of the base, unit: centimeters (cm)
-  base_width: 2.9
+  base_width: 2.8
   base_height: 2.6
 
   # 距离估算使用的维度: "width" | "height" | "average"
@@ -47,4 +47,8 @@ apriltag:
   family: "tag36h11"
 
   # Physical tag edge length in centimeters. Measure the printed tag carefully.
-  tag_size_cm: 5.0
+  tag_size_cm: 4.9
+
+  # Mirror the input image horizontally before AprilTag detection.
+  # Enable this if printed tags are left-right mirrored.
+  mirror_input: true

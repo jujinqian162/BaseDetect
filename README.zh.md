@@ -20,7 +20,7 @@ BaseDetect/
 代码与生成产物分开存放，便于清理工作目录，也能避免无意提交大型文件。
 
 ## 环境准备
-- Python 版本：3.9 及以上；若需 GPU，请预装 CUDA 驱动并确认 `nvidia-smi` 正常输出。
+- Python 版本：3.10 及以上；若需 GPU，请预装 CUDA 驱动并确认 `nvidia-smi` 正常输出。
 - 依赖安装：推荐使用 [uv](https://github.com/astral-sh/uv)。
   ```bash
   uv sync

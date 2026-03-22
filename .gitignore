@@ -12,3 +12,4 @@ wheels/
 assets/calibarations/
 # Generated artifacts
 artifacts/
+datasets/

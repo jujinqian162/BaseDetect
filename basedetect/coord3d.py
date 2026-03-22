@@ -58,6 +58,7 @@ class AprilTagSpec:
 
     family: str
     tag_size_m: float
+    mirror_input: bool
 
 
 @dataclass(frozen=True)
@@ -201,14 +202,20 @@ def load_apriltag_config(config_path: str | Path) -> AprilTagSpec:
     apriltag: dict[str, Any] = raw.get("apriltag", {})
     family = str(apriltag.get("family", "tag36h11"))
     tag_size_cm = float(apriltag.get("tag_size_cm", 5.0))
+    mirror_input = bool(apriltag.get("mirror_input", False))
     if tag_size_cm <= 0:
         raise ValueError("apriltag.tag_size_cm must be positive.")
 
-    spec = AprilTagSpec(family=family, tag_size_m=_cm_to_m(tag_size_cm))
+    spec = AprilTagSpec(
+        family=family,
+        tag_size_m=_cm_to_m(tag_size_cm),
+        mirror_input=mirror_input,
+    )
     LOGGER.info(
-        "AprilTag spec: family=%s tag_size=%.1fcm",
+        "AprilTag spec: family=%s tag_size=%.1fcm mirror_input=%s",
         family,
         tag_size_cm,
+        mirror_input,
     )
     return spec
 
