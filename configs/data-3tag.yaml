@@ -1,0 +1,13 @@
+
+train: ../datasets/datasets-3tag/train/images
+val: ../datasets/datasets-3tag/valid/images
+test: ../datasets/datasets-3tag/test/images
+nc: 3
+names: ['fist', 'palm', 'spearhead']
+
+roboflow:
+  workspace: robocon-ozkss
+  project: enddetectwithtag
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/robocon-ozkss/enddetectwithtag/dataset/2
