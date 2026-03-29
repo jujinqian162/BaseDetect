@@ -592,5 +592,73 @@ class PredictCLIAdditionalSmoke(TestCase):
                         predict_module.main()
 
 
+class PredictConfigModeSmoke(TestCase):
+    @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.predict.ensure_runtime_dirs")
+    @mock.patch("scripts.predict.cv2.destroyAllWindows")
+    @mock.patch("scripts.predict.cv2.waitKey", return_value=0)
+    @mock.patch("scripts.predict.cv2.imshow")
+    @mock.patch("scripts.predict.cv2.putText")
+    @mock.patch("scripts.predict.cv2.VideoWriter")
+    @mock.patch("scripts.predict.cv2.VideoCapture")
+    @mock.patch("scripts.predict.load_camera_config")
+    @mock.patch("scripts.predict.YOLO")
+    def test_status_mode_from_yaml_draws_status_without_coord3d(
+        self,
+        mock_yolo: mock.Mock,
+        mock_load_camera_config: mock.Mock,
+        mock_video_capture: mock.Mock,
+        _writer: mock.Mock,
+        _put_text: mock.Mock,
+        _imshow: mock.Mock,
+        _wait: mock.Mock,
+        _destroy: mock.Mock,
+        _ensure_dirs: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        frame = np.zeros((24, 24, 3), dtype=np.uint8)
+        capture_instance = mock_video_capture.return_value
+        capture_instance.isOpened.return_value = True
+        capture_instance.read.side_effect = [(True, frame), (False, frame)]
+
+        track_result = SimpleNamespace(plot=lambda: frame)
+        track_result.boxes = SimpleNamespace(
+            xyxy=np.array([[1.0, 1.0, 10.0, 10.0], [12.0, 1.0, 20.0, 10.0]], dtype=np.float32),
+            cls=np.array([0.0, 2.0], dtype=np.float32),
+        )
+        track_result.names = {0: "spearhead", 1: "palm", 2: "fist"}
+        mock_yolo.return_value.track.return_value = [track_result]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            config_path = tmp_path / "predict.yaml"
+            config_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "predict": {
+                            "type": "status",
+                            "source": "0",
+                            "save": False,
+                            "show": False,
+                            "weights": "auto",
+                        }
+                    },
+                    sort_keys=False,
+                    allow_unicode=True,
+                ),
+                encoding="utf-8",
+            )
+
+            argv = ["scripts/predict.py", "--config", str(config_path)]
+            with mock.patch.object(sys, "argv", argv):
+                from scripts import predict as predict_module
+
+                with self.assertLogs("scripts.predict", level="INFO") as log_ctx:
+                    predict_module.main()
+
+        mock_load_camera_config.assert_not_called()
+        self.assertTrue(any("status=['spearhead', 'fist']" in entry for entry in log_ctx.output))
+
+
 if __name__ == "__main__":
     main()

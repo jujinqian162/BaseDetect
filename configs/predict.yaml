@@ -1,0 +1,22 @@
+predict:
+  type: "status"
+
+  common:
+    output: "artifacts/outputs/output.avi"
+    device: "auto"
+    conf: 0.25
+    save: true
+    show: true
+
+  status:
+    source: "test/test6.mp4"
+    weights: "artifacts/runs/data-3tag/weights/best.pt"
+
+  base_coord:
+    source: "test/test3.mp4"
+    weights: "artifacts\\runs\\datav7\\weights\\best.pt"
+    camera_config: "configs/camera.yaml"
+    coord3d: true
+    apriltag: false
+    apriltag_family: null
+    apriltag_size: null
