@@ -1,0 +1,58 @@
+# BaseDetect SDK runtime configuration
+#
+# Minimal use:
+# 1) keep active_profile as status_competition or base_coord_competition
+# 2) update weights path for your trained model
+# 3) for base_coord mode, set camera_yaml to your calibrated config
+# 4) status mode should use a multi-class status model (fist/palm/spearhead etc.),
+#    not a base-only model, otherwise status may remain empty.
+
+active_profile: status_competition
+
+runtime:
+  # auto -> cuda:0 when available, otherwise cpu
+  device: auto
+
+  # number of recent frames kept for temporal debouncing
+  queue_size: 5
+
+  # detector.ready becomes True after this many frames
+  warmup_frames: 3
+
+  # set true to enable debug_overlay() / debug_info()
+  debug: true
+
+  # follow current pipeline behavior: convert input to grayscale before YOLO
+  grayscale_input: true
+
+profiles:
+  status_competition:
+    mode: status
+    weights: models/data-3tag.pt
+    conf: 0.30
+
+    # slot-wise vote threshold for stable status output
+    vote_threshold: 3
+
+    # optional: left_to_right (default) or right_to_left
+    order: left_to_right
+
+  base_coord_competition:
+    mode: base_coord
+    weights:  models/data-v8-base.pt
+    conf: 0.25
+
+    # set false if you only need detections without 3D coords
+    coord3d: true
+
+    # required when coord3d=true
+    camera_yaml: camera.yaml
+
+    # optional: ema (default) or median
+    smoothing: ema
+
+    # used when smoothing=ema
+    ema_alpha: 0.35
+
+    # minimum frames required for each label to output stable 3D result
+    min_votes: 3

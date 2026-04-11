@@ -1,5 +1,5 @@
 predict:
-  type: "base coord"
+  type: "status"
 
   common:
     output: "artifacts/outputs/output.avi"
@@ -9,12 +9,12 @@ predict:
     show: true
 
   status:
-    source: "test/test6.mp4"
-    weights: "artifacts/runs/data-3tag/weights/best.pt"
+    source: "test/test7-2.mp4"
+    weights: "models/data-3tag.pt"
 
   base_coord:
-    source: "test/test6.mp4"
-    weights: "artifacts\\runs\\datav7\\weights\\best.pt"
+    source: "test/test7-2.mp4"
+    weights: "models/data-v8-base.pt"
     camera_config: "configs/camera.yaml"
     coord3d: true
     apriltag: false
