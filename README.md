@@ -97,6 +97,39 @@ uv run scripts/predict.py --source 0 --unshow
 uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --source test/test3.mp4
 ```
 
+## SDK Integration (Status / Base Coord)
+For robotics loops or service-style integration, use the lightweight SDK in `sdk/` with a single `Detector` object and runtime profile switching.
+
+Quick example:
+```python
+from sdk import Detector
+
+det = Detector(config="configs/basedetect_sdk.yaml", profile="status_competition")
+status = det.detect(frame)  # list[str]
+
+det.switch_profile("base_coord_competition")
+targets = det.detect(frame)  # list[Target3D]
+```
+
+Mode behavior:
+- `status` mode returns ordered class labels (`list[str]`) from each frame and applies slot-wise temporal voting.
+- `base_coord` mode returns stable targets (`list[Target3D]`) with `id`, `label`, `conf`, `x`, `y`, `z`.
+- `Detector.ready` becomes `True` only after warmup (`runtime.warmup_frames`), so you can gate control logic on stable output.
+- Both modes share the same temporal queue/debouncing pipeline (`runtime.queue_size` + profile vote settings).
+
+SDK config (`configs/basedetect_sdk.yaml`):
+- `runtime`: `device`, `queue_size`, `warmup_frames`, `debug`, `grayscale_input`.
+- `profiles.<name>.mode`: `status` or `base_coord`.
+- Status profile options: `vote_threshold`, `order` (`left_to_right` or `right_to_left`).
+- Base-coordinate profile options: `coord3d`, `camera_yaml`, `smoothing` (`ema` or `median`), `ema_alpha`, `min_votes`.
+
+SDK smoke test:
+```bash
+uv run scripts/test_sdk_visual.py --config configs/basedetect_sdk.yaml --source test/test7.mp4
+```
+
+See `sdk/README.md` for full API notes.
+
 ## Data & Configuration Management
 - `configs/` stores dataset descriptors and experiment settings. `configs/data-initial.yaml` (default) points to `datasets/datasets-initial/`, while `configs/data.yaml` references the Roboflow export under `datasets/datasets2/`. Copy either when creating new variants and adjust paths accordingly.
 - Place all dataset exports under `datasets/` (e.g., `datasets/custom_v1/`). Each dataset folder should contain `train/`, `valid/`, and `test/` subdirectories that match the YAML paths.

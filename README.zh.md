@@ -91,6 +91,39 @@ uv run scripts/predict.py --source 0 --unshow
 uv run scripts/predict.py --weights artifacts/runs/basedetect/weights/best.pt --source test/test3.mp4
 ```
 
+## SDK 集成（status / base_coord）
+如果要在机器人控制循环或服务化流程中调用，可使用 `sdk/` 下的轻量 SDK：一个 `Detector` 对象，支持运行时切换 profile。
+
+快速示例：
+```python
+from sdk import Detector
+
+det = Detector(config="configs/basedetect_sdk.yaml", profile="status_competition")
+status = det.detect(frame)  # list[str]
+
+det.switch_profile("base_coord_competition")
+targets = det.detect(frame)  # list[Target3D]
+```
+
+模式说明：
+- `status` 模式输出有序状态标签（`list[str]`），并做按槽位的时间窗口投票去抖。
+- `base_coord` 模式输出稳定目标列表（`list[Target3D]`），字段包含 `id`、`label`、`conf`、`x`、`y`、`z`。
+- 仅当达到预热帧数（`runtime.warmup_frames`）后，`Detector.ready` 才会变为 `True`，建议据此触发控制逻辑。
+- 两种模式共用同一套时间窗口稳定机制（`runtime.queue_size` + profile 投票参数）。
+
+SDK 配置（`configs/basedetect_sdk.yaml`）关键项：
+- `runtime`: `device`、`queue_size`、`warmup_frames`、`debug`、`grayscale_input`。
+- `profiles.<name>.mode`: `status` 或 `base_coord`。
+- status profile 参数：`vote_threshold`、`order`（`left_to_right` 或 `right_to_left`）。
+- base_coord profile 参数：`coord3d`、`camera_yaml`、`smoothing`（`ema` 或 `median`）、`ema_alpha`、`min_votes`。
+
+SDK 冒烟可视化：
+```bash
+uv run scripts/test_sdk_visual.py --config configs/basedetect_sdk.yaml --source test/test7.mp4
+```
+
+更完整 API 说明见 `sdk/README.md`。
+
 ## 数据与配置管理
 - `configs/` 保存数据源与实验设置。默认使用的 `configs/data-initial.yaml` 指向 `datasets/datasets-initial/`；`configs/data.yaml` 对应 `datasets/datasets2/` 下的 Roboflow 数据。复制模板即可衍生新配置。
 - 所有数据集统一存放在 `datasets/` 内，可按需创建如 `datasets/custom_v1/` 的目录，并确保其下包含 `train/valid/test` 子目录，以便 YAML 路径正确指向。

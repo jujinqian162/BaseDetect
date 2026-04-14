@@ -10,7 +10,7 @@ predict:
 
   status:
     source: "test/test7-2.mp4"
-    weights: "models/data-3tag.pt"
+    weights: "models/data-3tag-v2.pt"
 
   base_coord:
     source: "test/test7-2.mp4"
