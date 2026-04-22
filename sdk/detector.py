@@ -14,7 +14,7 @@ from ultralytics import YOLO
 from .config import ProfileSettings, SDKSettings, load_settings, resolve_profile
 from .modes import create_mode
 from .temporal import CoordStabilizer, FrameWindow, StatusStabilizer
-from .types import Target3D
+from .types import BaseCoordTarget, StatusTarget, Target3D
 
 
 LOGGER = logging.getLogger("sdk.detector")
@@ -51,6 +51,8 @@ class Detector:
         self._debug_enabled = self._runtime.debug
         self._last_overlay: np.ndarray | None = None
         self._last_info: dict[str, Any] = {}
+        self._last_status_targets: list[StatusTarget] = []
+        self._last_base_coord_targets: list[BaseCoordTarget] = []
         self._frame_index = 0
 
         self.switch_profile(profile)
@@ -87,6 +89,8 @@ class Detector:
         self._window.clear()
         self._coord_stabilizer.reset()
         self._ready = False
+        self._last_status_targets = []
+        self._last_base_coord_targets = []
         self._frame_index = 0
 
         self._model = YOLO(selected.weights)
@@ -95,7 +99,9 @@ class Detector:
         class_count = 0
         if isinstance(names, dict):
             class_count = len(names)
-            class_preview = [str(v) for _, v in sorted(names.items(), key=lambda kv: kv[0])[:8]]
+            class_preview = [
+                str(v) for _, v in sorted(names.items(), key=lambda kv: kv[0])[:8]
+            ]
 
         LOGGER.info(
             "Loaded profile=%s mode=%s weights=%s conf=%.2f classes=%d preview=%s",
@@ -124,11 +130,22 @@ class Detector:
         start = time.perf_counter()
         source = self._preprocess(frame)
         device = self._resolve_device(self._runtime.device)
-        results = self._model.track(source, persist=True, device=device, conf=self._profile.conf)
+        results = self._model.track(
+            source, persist=True, device=device, conf=self._profile.conf
+        )
         result = results[0]
         boxes = getattr(result, "boxes", None)
         detections_count = _boxes_count(boxes)
         observation = self._mode_plugin.parse_observation(result, frame.shape[:2])
+        if self._profile.mode == "status":
+            self._last_status_targets = self._extract_status_targets(result)
+            self._last_base_coord_targets = []
+        else:
+            self._last_status_targets = []
+            self._last_base_coord_targets = self._extract_base_coord_targets(
+                result=result,
+                observation=observation,
+            )
 
         self._window.push(observation)
         self._ready = self._window.ready_count >= self._runtime.warmup_frames
@@ -137,9 +154,7 @@ class Detector:
 
         if not self._ready:
             output = self._empty_output()
-            empty_reason = (
-                f"warmup: queue={self._window.ready_count}/{self._runtime.warmup_frames}"
-            )
+            empty_reason = f"warmup: queue={self._window.ready_count}/{self._runtime.warmup_frames}"
         else:
             history = self._window.snapshot()
             if self._profile.mode == "status":
@@ -202,6 +217,80 @@ class Detector:
         if not self._debug_enabled:
             return {}
         return dict(self._last_info)
+
+    def latest_status_targets(self) -> list[StatusTarget]:
+        return list(self._last_status_targets)
+
+    def latest_base_coord_targets(self) -> list[BaseCoordTarget]:
+        return list(self._last_base_coord_targets)
+
+    def _extract_status_targets(self, result: Any) -> list[StatusTarget]:
+        boxes = getattr(result, "boxes", None)
+        if boxes is None or _boxes_count(boxes) == 0:
+            return []
+
+        names: dict[int, str] = getattr(result, "names", {}) or {}
+        has_cls = getattr(boxes, "cls", None) is not None
+        has_conf = getattr(boxes, "conf", None) is not None
+        has_id = getattr(boxes, "id", None) is not None
+        count = _boxes_count(boxes)
+
+        targets: list[StatusTarget] = []
+        for i in range(count):
+            if has_cls:
+                cls_idx = int(boxes.cls[i])
+                label = str(names.get(cls_idx, cls_idx))
+            else:
+                label = "unknown"
+
+            x1, y1, x2, y2 = boxes.xyxy[i].tolist()
+            targets.append(
+                StatusTarget(
+                    id=int(boxes.id[i]) if has_id else None,
+                    label=label,
+                    conf=float(boxes.conf[i]) if has_conf else 0.0,
+                    cx=float((x1 + x2) / 2.0),
+                    cy=float((y1 + y2) / 2.0),
+                    width=float(x2 - x1),
+                    height=float(y2 - y1),
+                )
+            )
+
+        targets.sort(key=lambda item: item.cx)
+        return targets
+
+    def _extract_base_coord_targets(
+        self,
+        *,
+        result: Any,
+        observation: list[Target3D],
+    ) -> list[BaseCoordTarget]:
+        boxes = getattr(result, "boxes", None)
+        if boxes is None or _boxes_count(boxes) == 0:
+            return []
+
+        count = _boxes_count(boxes)
+        items: list[BaseCoordTarget] = []
+        for i in range(min(count, len(observation))):
+            target = observation[i]
+            x1, y1, x2, y2 = boxes.xyxy[i].tolist()
+            items.append(
+                BaseCoordTarget(
+                    id=target.id,
+                    label=target.label,
+                    conf=target.conf,
+                    cx=float((x1 + x2) / 2.0),
+                    cy=float((y1 + y2) / 2.0),
+                    width=float(x2 - x1),
+                    height=float(y2 - y1),
+                    x=target.x,
+                    y=target.y,
+                    z=target.z,
+                )
+            )
+
+        items.sort(key=lambda item: item.cx)
+        return items
 
     def _preprocess(self, frame: np.ndarray) -> np.ndarray:
         if not self._runtime.grayscale_input:
@@ -322,7 +411,9 @@ class Detector:
         if total_targets == 0:
             return "no detections in queue window"
 
-        counts = Counter((target.label, target.id) for frame in history for target in frame)
+        counts = Counter(
+            (target.label, target.id) for frame in history for target in frame
+        )
         assert self._coord_stabilizer is not None
         threshold = self._coord_stabilizer.min_votes
         preview = []

@@ -16,12 +16,14 @@ from sdk import Detector
 det = Detector(config="configs/basedetect_sdk.yaml", profile="status_competition")
 
 status = det.detect(frame)  # list[str] in status mode
+status_targets = det.latest_status_targets()  # list[StatusTarget], per-frame raw boxes
 if det.ready:
     # call your control logic when stable output is ready
     pass
 
 det.switch_profile("base_coord_competition")
 targets = det.detect(frame)  # list[Target3D] in base_coord mode
+base_coord_targets = det.latest_base_coord_targets()  # list[BaseCoordTarget], with cx/cy + xyz
 ```
 
 ## Public API
@@ -30,6 +32,12 @@ targets = det.detect(frame)  # list[Target3D] in base_coord mode
 - `Detector.detect(frame)`
   - returns `list[str]` when mode=`status`
   - returns `list[Target3D]` when mode=`base_coord`
+- `Detector.latest_status_targets()`
+  - returns `list[StatusTarget]` from latest frame (ordered by `cx`, left to right)
+  - valid in `status` mode; returns empty list in `base_coord`
+- `Detector.latest_base_coord_targets()`
+  - returns `list[BaseCoordTarget]` from latest frame (ordered by `cx`, left to right)
+  - valid in `base_coord` mode; returns empty list in `status`
 - `Detector.switch_profile(name)`
 - `Detector.ready` (bool)
 - `Detector.mode` ("status" or "base_coord")
@@ -43,6 +51,17 @@ targets = det.detect(frame)  # list[Target3D] in base_coord mode
   - Labels are ordered by horizontal position (`left_to_right` by default, configurable).
   - Temporal stabilization uses slot-wise voting in the recent frame window.
 
+- Status target output: `list[StatusTarget]`
+  - `StatusTarget` fields:
+    - `id: int | None`
+    - `label: str`
+    - `conf: float`
+    - `cx: float`
+    - `cy: float`
+    - `width: float`
+    - `height: float`
+  - Useful for control loops that need pixel-space error (e.g., PID on `cx - target_x`).
+
 - Base-coordinate mode output: `list[Target3D]`
   - `Target3D` fields:
     - `id: int | None` (tracker id)
@@ -52,6 +71,20 @@ targets = det.detect(frame)  # list[Target3D] in base_coord mode
     - `y: float`
     - `z: float`
   - If `coord3d=false`, targets are still returned, but `x/y/z` are `0.0`.
+
+- Base-coordinate target output: `list[BaseCoordTarget]`
+  - `BaseCoordTarget` fields:
+    - `id: int | None`
+    - `label: str`
+    - `conf: float`
+    - `cx: float`
+    - `cy: float`
+    - `width: float`
+    - `height: float`
+    - `x: float`
+    - `y: float`
+    - `z: float`
+  - Useful for selecting one base by pixel-space rule (e.g., minimal `|cx - target_x|`) and then publishing 3D coordinates.
 
 ### Stability and `ready`
 

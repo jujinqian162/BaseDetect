@@ -1,6 +1,6 @@
 """Public SDK API for BaseDetect."""
 
 from .detector import Detector
-from .types import Target3D
+from .types import BaseCoordTarget, StatusTarget, Target3D
 
-__all__ = ["Detector", "Target3D"]
+__all__ = ["BaseCoordTarget", "Detector", "StatusTarget", "Target3D"]
