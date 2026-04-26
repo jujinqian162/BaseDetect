@@ -131,7 +131,11 @@ class Detector:
         source = self._preprocess(frame)
         device = self._resolve_device(self._runtime.device)
         results = self._model.track(
-            source, persist=True, device=device, conf=self._profile.conf
+            source,
+            persist=True,
+            device=device,
+            conf=self._profile.conf,
+            verbose=False,
         )
         result = results[0]
         boxes = getattr(result, "boxes", None)

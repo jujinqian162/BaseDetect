@@ -28,7 +28,7 @@ runtime:
 profiles:
   status_competition:
     mode: status
-    weights: models/data-3tag.pt
+    weights: models/data-3tag-v2.pt
     conf: 0.30
 
     # slot-wise vote threshold for stable status output

@@ -34,7 +34,7 @@ def _resolve_path(candidate: Any, *, base_dir: Path, required: bool = False) -> 
     return resolved
 
 
-def _resolve_weights(candidate: Any, *, base_dir: Path) -> str:
+def _resolve_weights(candidate: Any, *, base_dir: Path, sdk_root: Path) -> str:
     if candidate is None:
         raise ValueError("Each profile requires a 'weights' field.")
 
@@ -43,9 +43,10 @@ def _resolve_weights(candidate: Any, *, base_dir: Path) -> str:
     if path.is_absolute() and path.exists():
         return str(path)
 
-    relative = (base_dir / path).resolve()
-    if relative.exists():
-        return str(relative)
+    for root in (base_dir, sdk_root):
+        relative = (root / path).resolve()
+        if relative.exists():
+            return str(relative)
 
     if path.exists():
         return str(path.resolve())
@@ -57,7 +58,7 @@ def _resolve_weights(candidate: Any, *, base_dir: Path) -> str:
     )
     if is_path_like:
         raise FileNotFoundError(
-            f"Weights path not found: {text} (resolved from {base_dir})"
+            f"Weights path not found: {text} (resolved from {base_dir} and {sdk_root})"
         )
 
     return text
@@ -124,10 +125,15 @@ def _parse_profile(
     name: str,
     raw_profile: dict[str, Any],
     base_dir: Path,
+    sdk_root: Path,
     runtime: RuntimeSettings,
 ) -> ProfileSettings:
     mode = _normalize_mode(raw_profile.get("mode"))
-    weights = _resolve_weights(raw_profile.get("weights"), base_dir=base_dir)
+    weights = _resolve_weights(
+        raw_profile.get("weights"),
+        base_dir=base_dir,
+        sdk_root=sdk_root,
+    )
 
     conf = float(raw_profile.get("conf", 0.25))
     if conf < 0.0 or conf > 1.0:
@@ -216,6 +222,7 @@ def load_settings(config_path: str | Path) -> SDKSettings:
         raise ValueError("profiles section must be a non-empty YAML mapping.")
 
     profiles: dict[str, ProfileSettings] = {}
+    sdk_root = path.parent.parent
     for profile_name, profile_payload in raw_profiles.items():
         if not isinstance(profile_payload, dict):
             raise ValueError(f"profiles.{profile_name} must be a YAML mapping.")
@@ -223,6 +230,7 @@ def load_settings(config_path: str | Path) -> SDKSettings:
             name=str(profile_name),
             raw_profile=profile_payload,
             base_dir=path.parent,
+            sdk_root=sdk_root,
             runtime=runtime,
         )
 
