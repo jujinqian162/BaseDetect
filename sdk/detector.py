@@ -35,7 +35,14 @@ def _boxes_count(boxes: Any) -> int:
 class Detector:
     """Simple SDK-style detector with profile switching and frame debouncing."""
 
-    def __init__(self, *, config: str | Path, profile: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        config: str | Path,
+        profile: str | None = None,
+        debug: bool | None = None,
+        export_video: str | Path | None = None,
+    ) -> None:
         self._settings: SDKSettings = load_settings(config)
         self._runtime = self._settings.runtime
 
@@ -48,7 +55,11 @@ class Detector:
         self._status_stabilizer: StatusStabilizer | None = None
         self._coord_stabilizer: CoordStabilizer | None = None
 
-        self._debug_enabled = self._runtime.debug
+        self._debug_enabled = self._runtime.debug if debug is None else bool(debug)
+        self._debug_export_video_path = _normalize_export_video_path(export_video)
+        self._debug_video_writer: Any | None = None
+        self._debug_video_size: tuple[int, int] | None = None
+        self._debug_export_failure_logged = False
         self._last_overlay: np.ndarray | None = None
         self._last_info: dict[str, Any] = {}
         self._last_status_targets: list[StatusTarget] = []
@@ -228,6 +239,25 @@ class Detector:
     def latest_base_coord_targets(self) -> list[BaseCoordTarget]:
         return list(self._last_base_coord_targets)
 
+    def release(self) -> None:
+        writer = self._debug_video_writer
+        self._debug_video_writer = None
+        self._debug_video_size = None
+        if writer is None:
+            return
+        release = getattr(writer, "release", None)
+        if callable(release):
+            release()
+
+    def close(self) -> None:
+        self.release()
+
+    def __del__(self) -> None:
+        try:
+            self.release()
+        except Exception:
+            pass
+
     def _extract_status_targets(self, result: Any) -> list[StatusTarget]:
         boxes = getattr(result, "boxes", None)
         if boxes is None or _boxes_count(boxes) == 0:
@@ -374,6 +404,7 @@ class Detector:
         )
 
         self._last_overlay = overlay
+        self._write_debug_overlay(overlay)
         self._last_info = {
             "frame_index": self._frame_index,
             "profile": self.profile_name,
@@ -426,3 +457,66 @@ class Detector:
             preview.append(f"{key}:{votes}<thr{threshold}")
 
         return "not enough votes " + ", ".join(preview)
+
+    def _write_debug_overlay(self, overlay: np.ndarray) -> None:
+        if self._debug_export_video_path is None:
+            return
+        try:
+            writer = self._ensure_debug_video_writer(overlay)
+            writer.write(overlay)
+        except Exception as exc:
+            self._disable_debug_export(exc)
+
+    def _ensure_debug_video_writer(self, overlay: np.ndarray) -> Any:
+        frame_height, frame_width = overlay.shape[:2]
+        frame_size = (int(frame_width), int(frame_height))
+        if self._debug_video_writer is not None:
+            if self._debug_video_size != frame_size:
+                raise RuntimeError(
+                    "Debug export video frame size changed from "
+                    f"{self._debug_video_size} to {frame_size}"
+                )
+            return self._debug_video_writer
+
+        assert self._debug_export_video_path is not None
+        self._debug_export_video_path.parent.mkdir(parents=True, exist_ok=True)
+        writer = cv2.VideoWriter(
+            str(self._debug_export_video_path),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            30.0,
+            frame_size,
+        )
+        is_opened = getattr(writer, "isOpened", None)
+        if callable(is_opened) and not is_opened():
+            release = getattr(writer, "release", None)
+            if callable(release):
+                release()
+            raise RuntimeError(
+                f"Failed to open debug export video: {self._debug_export_video_path}"
+            )
+        self._debug_video_writer = writer
+        self._debug_video_size = frame_size
+        return writer
+
+    def _disable_debug_export(self, exc: Exception) -> None:
+        writer = self._debug_video_writer
+        self._debug_video_writer = None
+        self._debug_video_size = None
+        self._debug_export_video_path = None
+        if writer is not None:
+            release = getattr(writer, "release", None)
+            if callable(release):
+                release()
+        if self._debug_export_failure_logged:
+            return
+        self._debug_export_failure_logged = True
+        LOGGER.warning("Debug export disabled after video write failure: %s", exc)
+
+
+def _normalize_export_video_path(export_video: str | Path | None) -> Path | None:
+    if export_video is None:
+        return None
+    raw_path = str(export_video).strip()
+    if raw_path == "":
+        raise ValueError("export_video must be a non-empty path when provided")
+    return Path(raw_path)
