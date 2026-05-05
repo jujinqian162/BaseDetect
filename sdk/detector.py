@@ -115,11 +115,12 @@ class Detector:
             ]
 
         LOGGER.info(
-            "Loaded profile=%s mode=%s weights=%s conf=%.2f classes=%d preview=%s",
+            "Loaded profile=%s mode=%s weights=%s conf=%.2f imgsz=%d classes=%d preview=%s",
             selected.name,
             selected.mode,
             selected.weights,
             selected.conf,
+            self._runtime.imgsz,
             class_count,
             class_preview,
         )
@@ -146,6 +147,7 @@ class Detector:
             persist=True,
             device=device,
             conf=self._profile.conf,
+            imgsz=self._runtime.imgsz,
             verbose=False,
         )
         result = results[0]
@@ -412,6 +414,7 @@ class Detector:
             "ready": self.ready,
             "queue_size": self._runtime.queue_size,
             "warmup_frames": self._runtime.warmup_frames,
+            "imgsz": self._runtime.imgsz,
             "latency_ms": round(elapsed_ms, 3),
             "frame_shape": tuple(int(v) for v in frame.shape),
             "detections_count": detections_count,

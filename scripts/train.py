@@ -13,11 +13,13 @@ import torch
 from ultralytics import YOLO
 
 from basedetect.paths import ensure_runtime_dirs, pretrained_dir, project_root, runs_dir
+from sdk.config import load_settings
 
 
 LOGGER = logging.getLogger(__name__)
 YELLOW = "\033[33m"
 RESET = "\033[0m"
+DEFAULT_IMGSZ = 640
 
 
 def warn_cpu_training() -> None:
@@ -30,11 +32,17 @@ def warn_cpu_training() -> None:
 
 
 DEFAULT_CONFIG = "configs/data-initial.yaml"
+DEFAULT_SDK_CONFIG = "configs/basedetect_sdk.yaml"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a YOLO model for BaseDetect.")
     parser.add_argument("--config", default=DEFAULT_CONFIG, help="Path to the dataset YAML file.")
+    parser.add_argument(
+        "--sdk-config",
+        default=DEFAULT_SDK_CONFIG,
+        help="SDK config used for shared runtime defaults such as imgsz.",
+    )
     parser.add_argument(
         "--model",
         default=str(pretrained_dir() / "yolov8n.pt"),
@@ -42,7 +50,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--epochs", type=int, default=10, help="Training epochs.")
     parser.add_argument("--batch", type=int, default=8, help="Images per batch.")
-    parser.add_argument("--imgsz", type=int, default=640, help="Input image size.")
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        default=None,
+        help="Input image size. Overrides runtime.imgsz from --sdk-config.",
+    )
     parser.add_argument("--device", default="auto", help="Device selection passed to Ultralytics.")
     parser.add_argument("--workers", type=int, default=4, help="Data loader workers.")
     parser.add_argument(
@@ -63,6 +76,22 @@ def resolve_path(path_str: str) -> Path:
     return project_root() / path
 
 
+def _validate_imgsz(imgsz: int) -> int:
+    if imgsz <= 0:
+        raise ValueError("imgsz must be positive.")
+    return imgsz
+
+
+def resolve_training_imgsz(args: argparse.Namespace) -> int:
+    if args.imgsz is not None:
+        return _validate_imgsz(int(args.imgsz))
+
+    sdk_config_path = resolve_path(args.sdk_config)
+    if not sdk_config_path.exists():
+        return DEFAULT_IMGSZ
+    return _validate_imgsz(load_settings(sdk_config_path).runtime.imgsz)
+
+
 def main() -> None:
     args = parse_args()
     ensure_runtime_dirs()
@@ -76,6 +105,7 @@ def main() -> None:
         model_source = str(model_path)
     else:
         model_source = args.model
+    imgsz = resolve_training_imgsz(args)
 
     device = args.device
     if device == "auto":
@@ -87,7 +117,7 @@ def main() -> None:
     model.train(
         data=str(config_path),
         epochs=args.epochs,
-        imgsz=args.imgsz,
+        imgsz=imgsz,
         batch=args.batch,
         device=device,
         workers=args.workers,

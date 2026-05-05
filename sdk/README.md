@@ -112,6 +112,7 @@ Important config fields:
 
 - `runtime`:
   - `device`: `auto`, `cpu`, `0`, etc.
+  - `imgsz`: shared YOLO input size used by SDK inference and by `scripts/train.py` when `--imgsz` is omitted.
   - `queue_size`: temporal window length for stabilization.
   - `warmup_frames`: required observations before `ready=True`.
   - `debug`: enables `debug_overlay()` and `debug_info()`.

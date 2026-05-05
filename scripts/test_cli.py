@@ -22,6 +22,40 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+def write_minimal_data_config(path: Path) -> None:
+    path.write_text("path: .\nnames: []\n", encoding="utf-8")
+
+
+def write_minimal_sdk_config(
+    path: Path,
+    *,
+    imgsz: int | None = None,
+    runtime: dict[str, object] | None = None,
+    active_profile: str | None = None,
+) -> None:
+    runtime_payload = dict(runtime or {})
+    if imgsz is not None:
+        runtime_payload["imgsz"] = imgsz
+
+    payload: dict[str, object] = {
+        "runtime": runtime_payload,
+        "profiles": {
+            "demo": {
+                "mode": "status",
+                "weights": "yolov8n.pt",
+                "conf": 0.25,
+            }
+        },
+    }
+    if active_profile is not None:
+        payload["active_profile"] = active_profile
+
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
 class Coord3DUnitTests(TestCase):
     def test_scale_intrinsics_preserves_depth_across_resolution_change(self) -> None:
         from basedetect.coord3d import CameraIntrinsics, TargetSpec, pixel_to_3d, scale_intrinsics
@@ -122,6 +156,137 @@ class TrainCLISmoke(TestCase):
                 train_module.main()
 
         mock_warn.assert_not_called()
+
+    @mock.patch("scripts.train.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.train.YOLO")
+    def test_sdk_config_imgsz_is_used_when_cli_imgsz_omitted(
+        self,
+        mock_yolo: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        mock_model = mock_yolo.return_value
+        mock_model.train.return_value = None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            data_config = tmp_path / "data.yaml"
+            write_minimal_data_config(data_config)
+            sdk_config = tmp_path / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(sdk_config, imgsz=960)
+
+            argv = [
+                "scripts/train.py",
+                "--config",
+                str(data_config),
+                "--sdk-config",
+                str(sdk_config),
+            ]
+            with mock.patch.object(sys, "argv", argv):
+                from scripts import train as train_module
+
+                train_module.main()
+
+        self.assertEqual(mock_model.train.call_args.kwargs["imgsz"], 960)
+
+    @mock.patch("scripts.train.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.train.YOLO")
+    def test_cli_imgsz_overrides_sdk_config_imgsz(
+        self,
+        mock_yolo: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        mock_model = mock_yolo.return_value
+        mock_model.train.return_value = None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            data_config = tmp_path / "data.yaml"
+            write_minimal_data_config(data_config)
+            sdk_config = tmp_path / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(sdk_config, imgsz=960)
+
+            argv = [
+                "scripts/train.py",
+                "--config",
+                str(data_config),
+                "--sdk-config",
+                str(sdk_config),
+                "--imgsz",
+                "1280",
+            ]
+            with mock.patch.object(sys, "argv", argv):
+                from scripts import train as train_module
+
+                train_module.main()
+
+        self.assertEqual(mock_model.train.call_args.kwargs["imgsz"], 1280)
+
+
+class SDKConfigSmoke(TestCase):
+    def test_runtime_imgsz_defaults_to_640(self) -> None:
+        from sdk.config import load_settings
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(config_path, runtime={"device": "cpu"})
+
+            settings = load_settings(config_path)
+
+        self.assertEqual(settings.runtime.imgsz, 640)
+
+    def test_runtime_imgsz_accepts_config_value(self) -> None:
+        from sdk.config import load_settings
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(config_path, imgsz=960, runtime={"device": "cpu"})
+
+            settings = load_settings(config_path)
+
+        self.assertEqual(settings.runtime.imgsz, 960)
+
+    def test_runtime_imgsz_must_be_positive(self) -> None:
+        from sdk.config import load_settings
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(config_path, imgsz=0, runtime={"device": "cpu"})
+
+            with self.assertRaises(ValueError):
+                load_settings(config_path)
+
+    @mock.patch("sdk.detector.YOLO")
+    def test_detector_passes_configured_imgsz_to_track(
+        self,
+        mock_yolo: mock.Mock,
+    ) -> None:
+        from sdk import Detector
+
+        frame = np.zeros((32, 32, 3), dtype=np.uint8)
+        track_result = SimpleNamespace(boxes=None, names={})
+        mock_model = mock_yolo.return_value
+        mock_model.names = {}
+        mock_model.track.return_value = [track_result]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(
+                config_path,
+                active_profile="demo",
+                imgsz=960,
+                runtime={
+                    "device": "cpu",
+                    "queue_size": 1,
+                    "warmup_frames": 1,
+                    "debug": False,
+                    "grayscale_input": False,
+                },
+            )
+
+            detector = Detector(config=config_path)
+            detector.detect(frame)
+
+        self.assertEqual(mock_model.track.call_args.kwargs["imgsz"], 960)
 
 
 class PredictCLISmoke(TestCase):

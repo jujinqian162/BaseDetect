@@ -54,7 +54,9 @@ uv run scripts/train.py [options]
 ```
 - `--config PATH` — dataset YAML. Defaults to `configs/data-initial.yaml`.
 - `--model SOURCE` — initial weights (file path or Ultralytics model name). Defaults to `weights/pretrained/yolov8n.pt`.
-- `--epochs / --batch / --imgsz` — standard hyperparameters with defaults `10`, `8`, and `640`.
+- `--epochs / --batch` — standard hyperparameters with defaults `10` and `8`.
+- `--sdk-config` — SDK config used for shared defaults such as `runtime.imgsz`; defaults to `configs/basedetect_sdk.yaml`.
+- `--imgsz` — optional CLI override for the YOLO input size. When omitted, training uses `runtime.imgsz` from the SDK config.
 - `--device` — Ultralytics device string; `auto` prefers the first GPU when CUDA is available.
 - `--project / --name` — overrides for the Ultralytics experiment directory (`artifacts/runs/basedetect` by default).
 - `--resume`, `--patience` — control checkpoint resumption and early stopping.
@@ -118,7 +120,7 @@ Mode behavior:
 - Both modes share the same temporal queue/debouncing pipeline (`runtime.queue_size` + profile vote settings).
 
 SDK config (`configs/basedetect_sdk.yaml`):
-- `runtime`: `device`, `queue_size`, `warmup_frames`, `debug`, `grayscale_input`.
+- `runtime`: `device`, `imgsz`, `queue_size`, `warmup_frames`, `debug`, `grayscale_input`.
 - `profiles.<name>.mode`: `status` or `base_coord`.
 - Status profile options: `vote_threshold`, `order` (`left_to_right` or `right_to_left`).
 - Base-coordinate profile options: `coord3d`, `camera_yaml`, `smoothing` (`ema` or `median`), `ema_alpha`, `min_votes`.

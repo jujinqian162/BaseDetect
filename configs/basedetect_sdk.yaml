@@ -13,6 +13,9 @@ runtime:
   # auto -> cuda:0 when available, otherwise cpu
   device: auto
 
+  # shared YOLO input size for both training defaults and SDK inference
+  imgsz: 960
+
   # number of recent frames kept for temporal debouncing
   queue_size: 5
 

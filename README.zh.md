@@ -49,7 +49,9 @@ uv run scripts/train.py [参数]
 ```
 - `--config PATH`：数据集配置文件，默认读取 `configs/data-initial.yaml`。
 - `--model SOURCE`：初始权重路径或 Ultralytics 模型名。默认读取 `weights/pretrained/yolov8n.pt`。
-- `--epochs / --batch / --imgsz`：常规超参，缺省值分别为 `10`、`8`、`640`。
+- `--epochs / --batch`：常规超参，缺省值分别为 `10`、`8`。
+- `--sdk-config`：用于共享默认值的 SDK 配置，默认读取 `configs/basedetect_sdk.yaml`，其中包括 `runtime.imgsz`。
+- `--imgsz`：YOLO 输入尺寸的命令行覆盖项。省略时训练会读取 SDK 配置里的 `runtime.imgsz`。
 - `--device`：传递给 YOLO 的设备字符串；在 `auto` 模式下优先使用首块 GPU。
 - `--project / --name`：实验输出位置，默认为 `artifacts/runs/basedetect`。
 - `--resume` 与 `--patience`：对应重训与早停策略。
@@ -112,7 +114,7 @@ targets = det.detect(frame)  # list[Target3D]
 - 两种模式共用同一套时间窗口稳定机制（`runtime.queue_size` + profile 投票参数）。
 
 SDK 配置（`configs/basedetect_sdk.yaml`）关键项：
-- `runtime`: `device`、`queue_size`、`warmup_frames`、`debug`、`grayscale_input`。
+- `runtime`: `device`、`imgsz`、`queue_size`、`warmup_frames`、`debug`、`grayscale_input`。
 - `profiles.<name>.mode`: `status` 或 `base_coord`。
 - status profile 参数：`vote_threshold`、`order`（`left_to_right` 或 `right_to_left`）。
 - base_coord profile 参数：`coord3d`、`camera_yaml`、`smoothing`（`ema` 或 `median`）、`ema_alpha`、`min_votes`。

@@ -67,6 +67,7 @@ def _resolve_weights(candidate: Any, *, base_dir: Path, sdk_root: Path) -> str:
 @dataclass(frozen=True)
 class RuntimeSettings:
     device: str
+    imgsz: int
     queue_size: int
     warmup_frames: int
     debug: bool
@@ -97,6 +98,10 @@ class SDKSettings:
 
 
 def _parse_runtime(raw_runtime: dict[str, Any]) -> RuntimeSettings:
+    imgsz = int(raw_runtime.get("imgsz", 640))
+    if imgsz <= 0:
+        raise ValueError("runtime.imgsz must be positive.")
+
     queue_size = int(raw_runtime.get("queue_size", 5))
     if queue_size <= 0:
         raise ValueError("runtime.queue_size must be positive.")
@@ -109,6 +114,7 @@ def _parse_runtime(raw_runtime: dict[str, Any]) -> RuntimeSettings:
 
     return RuntimeSettings(
         device=str(raw_runtime.get("device", "auto")),
+        imgsz=imgsz,
         queue_size=queue_size,
         warmup_frames=warmup_frames,
         debug=bool(raw_runtime.get("debug", False)),
