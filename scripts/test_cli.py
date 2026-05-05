@@ -84,7 +84,10 @@ class TrainCLISmoke(TestCase):
         mock_model.train.assert_called_once()
         called_kwargs = mock_model.train.call_args.kwargs
         self.assertIn("data", called_kwargs)
-        self.assertTrue(str(called_kwargs["data"]).endswith("configs/data-initial.yaml"))
+        self.assertEqual(
+            Path(called_kwargs["data"]).resolve(),
+            REPO_ROOT / "configs" / "data-initial.yaml",
+        )
         self.assertTrue(any("没有检测到 CUDA" in entry for entry in log_ctx.output))
         self.assertTrue(any("CUDA unavailable" in entry for entry in log_ctx.output))
 
@@ -151,7 +154,16 @@ class PredictCLISmoke(TestCase):
         mock_model = mock_yolo.return_value
         mock_model.track.return_value = [track_result]
 
-        argv = ["scripts/predict.py", "--source", "0", "--no-save", "--conf", "0.3"]
+        argv = [
+            "scripts/predict.py",
+            "--source",
+            "0",
+            "--no-save",
+            "--conf",
+            "0.3",
+            "--weights",
+            "auto",
+        ]
         with mock.patch.object(sys, "argv", argv):
             from scripts import predict as predict_module
 
@@ -360,6 +372,8 @@ class CalibrationVideoCLISmoke(TestCase):
                 str(output_path),
                 "--report",
                 str(report_path),
+                "--pattern",
+                "chessboard",
                 "--max-frames",
                 "3",
             ]
@@ -501,7 +515,16 @@ class PredictCLIAdditionalSmoke(TestCase):
         )
         mock_create_apriltag_detector.return_value = detector
 
-        argv = ["scripts/predict.py", "--source", "fake.mp4", "--no-save", "--unshow", "--apriltag"]
+        argv = [
+            "scripts/predict.py",
+            "--type",
+            "base_coord",
+            "--source",
+            "fake.mp4",
+            "--no-save",
+            "--unshow",
+            "--apriltag",
+        ]
         with mock.patch.object(sys, "argv", argv):
             from scripts import predict as predict_module
 
