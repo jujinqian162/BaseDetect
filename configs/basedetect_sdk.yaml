@@ -31,7 +31,7 @@ runtime:
 profiles:
   status_competition:
     mode: status
-    weights: models/data-3tag-v2.pt
+    weights: models/data-3tag-noresize.pt
     conf: 0.30
 
     # slot-wise vote threshold for stable status output
@@ -42,7 +42,7 @@ profiles:
 
   base_coord_competition:
     mode: base_coord
-    weights:  models/data-v8-base.pt
+    weights:  models/data-base-noresize.pt
     conf: 0.25
 
     # set false if you only need detections without 3D coords
