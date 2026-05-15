@@ -440,6 +440,190 @@ class PredictCLISmoke(TestCase):
         mock_imshow.assert_not_called()
         mock_destroy.assert_not_called()
 
+    @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.predict.ensure_runtime_dirs")
+    @mock.patch("scripts.predict.cv2.destroyAllWindows")
+    @mock.patch("scripts.predict.cv2.waitKey", return_value=0)
+    @mock.patch("scripts.predict.cv2.imshow")
+    @mock.patch("scripts.predict.cv2.VideoWriter")
+    @mock.patch("scripts.predict.cv2.VideoCapture")
+    @mock.patch("scripts.predict.YOLO")
+    def test_sdk_grayscale_false_tracks_original_color_frame(
+        self,
+        mock_yolo: mock.Mock,
+        mock_video_capture: mock.Mock,
+        _video_writer: mock.Mock,
+        _imshow: mock.Mock,
+        _wait_key: mock.Mock,
+        _destroy: mock.Mock,
+        _ensure_dirs: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        frame[:, :, 0] = 20
+        frame[:, :, 1] = 80
+        frame[:, :, 2] = 220
+        capture_instance = mock_video_capture.return_value
+        capture_instance.isOpened.return_value = True
+        capture_instance.read.side_effect = [(True, frame), (False, frame)]
+
+        track_result = SimpleNamespace(plot=lambda: frame)
+        mock_yolo.return_value.track.return_value = [track_result]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            sdk_config = tmp_path / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(
+                sdk_config,
+                runtime={"device": "cpu", "grayscale_input": False},
+            )
+
+            argv = [
+                "scripts/predict.py",
+                "--source",
+                "0",
+                "--no-save",
+                "--unshow",
+                "--weights",
+                "auto",
+                "--sdk-config",
+                str(sdk_config),
+            ]
+            with mock.patch.object(sys, "argv", argv):
+                from scripts import predict as predict_module
+
+                with mock.patch("scripts.predict.runs_dir", return_value=tmp_path):
+                    predict_module.main()
+
+        tracked_frame = mock_yolo.return_value.track.call_args.args[0]
+        self.assertIs(tracked_frame, frame)
+
+    @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.predict.ensure_runtime_dirs")
+    @mock.patch("scripts.predict.cv2.destroyAllWindows")
+    @mock.patch("scripts.predict.cv2.waitKey", return_value=0)
+    @mock.patch("scripts.predict.cv2.imshow")
+    @mock.patch("scripts.predict.cv2.VideoWriter")
+    @mock.patch("scripts.predict.cv2.VideoCapture")
+    @mock.patch("scripts.predict.YOLO")
+    def test_sdk_grayscale_true_tracks_gray_rgb_frame(
+        self,
+        mock_yolo: mock.Mock,
+        mock_video_capture: mock.Mock,
+        _video_writer: mock.Mock,
+        _imshow: mock.Mock,
+        _wait_key: mock.Mock,
+        _destroy: mock.Mock,
+        _ensure_dirs: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        frame[:, :, 0] = 20
+        frame[:, :, 1] = 80
+        frame[:, :, 2] = 220
+        capture_instance = mock_video_capture.return_value
+        capture_instance.isOpened.return_value = True
+        capture_instance.read.side_effect = [(True, frame), (False, frame)]
+
+        track_result = SimpleNamespace(plot=lambda: frame)
+        mock_yolo.return_value.track.return_value = [track_result]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            sdk_config = tmp_path / "basedetect_sdk.yaml"
+            write_minimal_sdk_config(
+                sdk_config,
+                runtime={"device": "cpu", "grayscale_input": True},
+            )
+
+            argv = [
+                "scripts/predict.py",
+                "--source",
+                "0",
+                "--no-save",
+                "--unshow",
+                "--weights",
+                "auto",
+                "--sdk-config",
+                str(sdk_config),
+            ]
+            with mock.patch.object(sys, "argv", argv):
+                from scripts import predict as predict_module
+
+                with mock.patch("scripts.predict.runs_dir", return_value=tmp_path):
+                    predict_module.main()
+
+        tracked_frame = mock_yolo.return_value.track.call_args.args[0]
+        self.assertIsNot(tracked_frame, frame)
+        self.assertTrue(np.array_equal(tracked_frame[:, :, 0], tracked_frame[:, :, 1]))
+        self.assertTrue(np.array_equal(tracked_frame[:, :, 1], tracked_frame[:, :, 2]))
+
+    @mock.patch("scripts.predict.torch.cuda.is_available", return_value=False)
+    @mock.patch("scripts.predict.ensure_runtime_dirs")
+    @mock.patch("scripts.predict.cv2.destroyAllWindows")
+    @mock.patch("scripts.predict.cv2.waitKey", return_value=0)
+    @mock.patch("scripts.predict.cv2.imshow")
+    @mock.patch("scripts.predict.cv2.VideoWriter")
+    @mock.patch("scripts.predict.cv2.VideoCapture")
+    @mock.patch("scripts.predict.YOLO")
+    def test_predict_only_reads_sdk_runtime_for_grayscale_input(
+        self,
+        mock_yolo: mock.Mock,
+        mock_video_capture: mock.Mock,
+        _video_writer: mock.Mock,
+        _imshow: mock.Mock,
+        _wait_key: mock.Mock,
+        _destroy: mock.Mock,
+        _ensure_dirs: mock.Mock,
+        _: mock.Mock,
+    ) -> None:
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        capture_instance = mock_video_capture.return_value
+        capture_instance.isOpened.return_value = True
+        capture_instance.read.side_effect = [(True, frame), (False, frame)]
+
+        track_result = SimpleNamespace(plot=lambda: frame)
+        mock_yolo.return_value.track.return_value = [track_result]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            sdk_config = tmp_path / "basedetect_sdk.yaml"
+            sdk_config.write_text(
+                yaml.safe_dump(
+                    {
+                        "runtime": {"grayscale_input": False},
+                        "profiles": {
+                            "broken": {
+                                "mode": "status",
+                                "weights": "missing/weights.pt",
+                            }
+                        },
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+
+            argv = [
+                "scripts/predict.py",
+                "--source",
+                "0",
+                "--no-save",
+                "--unshow",
+                "--weights",
+                "auto",
+                "--sdk-config",
+                str(sdk_config),
+            ]
+            with mock.patch.object(sys, "argv", argv):
+                from scripts import predict as predict_module
+
+                with mock.patch("scripts.predict.runs_dir", return_value=tmp_path):
+                    predict_module.main()
+
+        tracked_frame = mock_yolo.return_value.track.call_args.args[0]
+        self.assertIs(tracked_frame, frame)
+
 
 class CalibrationCLISmoke(TestCase):
     @mock.patch("scripts.calibration.resolve_image_paths")

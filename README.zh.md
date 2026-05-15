@@ -76,9 +76,11 @@ uv run scripts/train.py --model yolov8n.pt --device cpu --batch 4
 uv run scripts/predict.py [参数]
 ```
 - `--weights`：自动查找最近的 `artifacts/runs/**/weights/best.pt`，如未找到则回退到 `weights/pretrained/yolov8n.pt`。
+- `--sdk-config`：用于共享运行时行为的 SDK 配置，默认读取 `configs/basedetect_sdk.yaml`，其中包括 `runtime.grayscale_input`。
 - `--source`：输入源，既可以是 `test/test3.mp4` 等文件，也可以直接给摄像头索引。
 - `--output`：输出视频路径，默认 `artifacts/outputs/output.avi`。
 - `--conf / --device / --no-save / --unshow` 等参数与 Ultralytics CLI 用法一致，便于迁移。
+- YOLO 输入和 `--show` 预览都会跟随 `runtime.grayscale_input`：`true` 显示灰度推理帧，`false` 保留彩色帧。
 - 当 `--weights auto` 未找到最新训练权重时，会打印黄色的中英双语警告并回退到内置预训练模型，确保你了解当前使用的权重来源。
 
 常见用法：

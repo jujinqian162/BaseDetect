@@ -82,9 +82,11 @@ Run the inference CLI:
 uv run scripts/predict.py [options]
 ```
 - `--weights` — selects the newest `artifacts/runs/**/weights/best.pt` or falls back to `weights/pretrained/yolov8n.pt`.
+- `--sdk-config` — SDK config used for shared runtime behavior such as `runtime.grayscale_input`; defaults to `configs/basedetect_sdk.yaml`.
 - `--source` — video path or camera index (`test/test3.mp4` by default).
 - `--output` — annotated video destination (`artifacts/outputs/output.avi` by default).
 - `--device`, `--conf`, `--no-save`, `--unshow` — mirror the Ultralytics CLI options.
+- The YOLO input and `--show` preview follow `runtime.grayscale_input`: `true` shows grayscale inference frames, `false` keeps color frames.
 - When `--weights auto` cannot find a freshly trained checkpoint, the script emits a yellow bilingual warning and falls back to the bundled pretrained model so you know which weights are in use.
 
 Common patterns:

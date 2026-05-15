@@ -36,10 +36,12 @@ from basedetect.coord3d import (
 LOGGER = logging.getLogger(__name__)
 YELLOW = "\033[33m"
 RESET = "\033[0m"
+DEFAULT_GRAYSCALE_INPUT = True
 
 DEFAULT_MODE = "base coord"
 DEFAULT_OPTIONS: dict[str, Any] = {
     "type": DEFAULT_MODE,
+    "sdk_config": str(project_root() / "configs" / "basedetect_sdk.yaml"),
     "weights": "auto",
     "source": str(project_root() / "test" / "test3.mp4"),
     "output": str(outputs_dir() / "output.avi"),
@@ -93,6 +95,11 @@ def parse_args() -> argparse.Namespace:
         "--config",
         default=str(project_root() / "configs" / "predict.yaml"),
         help="Top-level YAML runtime config. Missing file is ignored.",
+    )
+    parser.add_argument(
+        "--sdk-config",
+        default=None,
+        help="SDK config used for shared runtime defaults such as grayscale_input.",
     )
     parser.add_argument(
         "--type",
@@ -263,6 +270,24 @@ def _load_runtime_config(config_path: str | None) -> dict[str, Any]:
     return normalized
 
 
+def _load_sdk_grayscale_input(config_path: str) -> bool:
+    path = Path(config_path).expanduser()
+    if not path.exists():
+        raise FileNotFoundError(f"SDK config not found: {path}")
+
+    with path.open("r", encoding="utf-8") as fh:
+        loaded = yaml.safe_load(fh) or {}
+
+    if not isinstance(loaded, dict):
+        raise ValueError(f"SDK config must be a mapping: {path}")
+
+    runtime = loaded.get("runtime", {})
+    if not isinstance(runtime, dict):
+        raise ValueError(f"SDK config 'runtime' section must be a mapping: {path}")
+
+    return bool(runtime.get("grayscale_input", DEFAULT_GRAYSCALE_INPUT))
+
+
 def _normalized_mapping(mapping: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for key, value in mapping.items():
@@ -315,6 +340,7 @@ def _resolve_runtime_options(args: argparse.Namespace) -> dict[str, Any]:
 
     options = {
         "type": selected_type,
+        "sdk_config": _resolve_option(args.sdk_config, merged_config.get("sdk_config"), default=DEFAULT_OPTIONS["sdk_config"]),
         "weights": _resolve_option(args.weights, merged_config.get("weights"), default=DEFAULT_OPTIONS["weights"]),
         "source": _resolve_option(args.source, merged_config.get("source"), default=DEFAULT_OPTIONS["source"]),
         "output": _resolve_option(args.output, merged_config.get("output"), default=DEFAULT_OPTIONS["output"]),
@@ -354,6 +380,11 @@ def _resolve_runtime_options(args: argparse.Namespace) -> dict[str, Any]:
         if not source_candidate.is_absolute() and not str(options["source"]).isdigit():
             options["source"] = str(project_root() / source_candidate)
 
+    if isinstance(options["sdk_config"], str):
+        sdk_config_candidate = Path(options["sdk_config"]).expanduser()
+        if not sdk_config_candidate.is_absolute():
+            options["sdk_config"] = str(project_root() / sdk_config_candidate)
+
     if isinstance(options["output"], str):
         output_candidate = Path(options["output"]).expanduser()
         if not output_candidate.is_absolute():
@@ -373,6 +404,13 @@ def _resolve_runtime_options(args: argparse.Namespace) -> dict[str, Any]:
         options["coord3d"] = False
         options["apriltag"] = False
     return options
+
+
+def _preprocess_yolo_frame(frame: Any, *, grayscale_input: bool) -> Any:
+    if not grayscale_input:
+        return frame
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
 
 def _extract_status_labels(result: Any) -> list[str]:
@@ -464,15 +502,16 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
 
+    grayscale_input = _load_sdk_grayscale_input(str(runtime["sdk_config"]))
     LOGGER.info(
-        "Mode=%s save=%s show=%s coord3d=%s apriltag=%s",
+        "Mode=%s save=%s show=%s coord3d=%s apriltag=%s grayscale_input=%s",
         runtime["type"],
         runtime["save"],
         runtime["show"],
         runtime["coord3d"],
         runtime["apriltag"],
+        grayscale_input,
     )
-
     weights = resolve_weights(str(runtime["weights"]))
     model = YOLO(weights)
 
@@ -561,11 +600,11 @@ def main() -> None:
             if not ok:
                 break
 
+            yolo_frame = _preprocess_yolo_frame(frame, grayscale_input=grayscale_input)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            gray_rgb = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
             results = model.track(
-                gray_rgb,
+                yolo_frame,
                 persist=True,
                 device=device,
                 conf=float(runtime["conf"]),
