@@ -68,16 +68,18 @@ class CoordStabilizer:
         min_votes: int,
         smoothing: str,
         ema_alpha: float,
+        max_jump: float,
     ) -> None:
         if min_votes <= 0:
             raise ValueError("min_votes must be positive.")
         self.min_votes = min_votes
         self.smoothing = smoothing
         self.ema_alpha = ema_alpha
-        self._ema_state: dict[str, tuple[float, float, float]] = {}
+        self.max_jump = max_jump
+        self._last_output: dict[str, tuple[float, float, float]] = {}
 
     def reset(self) -> None:
-        self._ema_state.clear()
+        self._last_output.clear()
 
     def stabilize(self, history: list[list[Target3D]]) -> list[Target3D]:
         if not history:
@@ -89,19 +91,24 @@ class CoordStabilizer:
                 key = (target.label, target.id)
                 grouped.setdefault(key, []).append(target)
 
+        active_keys: set[str] = set()
         stable: list[Target3D] = []
         for key, items in grouped.items():
             if len(items) < self.min_votes:
                 continue
 
             label, track_id = key
+            state_key = f"{label}:{track_id}"
+            active_keys.add(state_key)
 
             if self.smoothing == "median":
                 x = float(median(t.x for t in items))
                 y = float(median(t.y for t in items))
                 z = float(median(t.z for t in items))
             else:
-                x, y, z = self._ema_label(label=label, track_id=track_id, samples=items)
+                x, y, z = self._windowed_ema(samples=items)
+
+            x, y, z = self._clamp_jump(state_key, x, y, z)
 
             latest = max(items, key=lambda t: t.conf)
             stable.append(
@@ -115,28 +122,36 @@ class CoordStabilizer:
                 )
             )
 
+        stale = [k for k in self._last_output if k not in active_keys]
+        for k in stale:
+            del self._last_output[k]
+
         stable.sort(key=lambda target: (target.label, -1 if target.id is None else target.id))
         return stable
 
-    def _ema_label(
-        self,
-        *,
-        label: str,
-        track_id: int | None,
-        samples: list[Target3D],
+    def _windowed_ema(self, samples: list[Target3D]) -> tuple[float, float, float]:
+        x, y, z = samples[0].x, samples[0].y, samples[0].z
+        for s in samples[1:]:
+            x = self.ema_alpha * s.x + (1.0 - self.ema_alpha) * x
+            y = self.ema_alpha * s.y + (1.0 - self.ema_alpha) * y
+            z = self.ema_alpha * s.z + (1.0 - self.ema_alpha) * z
+        return x, y, z
+
+    def _clamp_jump(
+        self, state_key: str, x: float, y: float, z: float
     ) -> tuple[float, float, float]:
-        sample = samples[-1]
-        current = (sample.x, sample.y, sample.z)
-        state_key = f"{label}:{track_id}"
-        previous = self._ema_state.get(state_key)
+        prev = self._last_output.get(state_key)
+        if prev is None or self.max_jump <= 0.0:
+            self._last_output[state_key] = (x, y, z)
+            return x, y, z
 
-        if previous is None:
-            self._ema_state[state_key] = current
-            return current
+        dx, dy, dz = x - prev[0], y - prev[1], z - prev[2]
+        dist = (dx * dx + dy * dy + dz * dz) ** 0.5
+        if dist <= self.max_jump:
+            self._last_output[state_key] = (x, y, z)
+            return x, y, z
 
-        ax = self.ema_alpha * current[0] + (1.0 - self.ema_alpha) * previous[0]
-        ay = self.ema_alpha * current[1] + (1.0 - self.ema_alpha) * previous[1]
-        az = self.ema_alpha * current[2] + (1.0 - self.ema_alpha) * previous[2]
-        updated = (ax, ay, az)
-        self._ema_state[state_key] = updated
-        return updated
+        scale = self.max_jump / dist
+        clamped = (prev[0] + dx * scale, prev[1] + dy * scale, prev[2] + dz * scale)
+        self._last_output[state_key] = clamped
+        return clamped

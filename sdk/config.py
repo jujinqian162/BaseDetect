@@ -87,6 +87,7 @@ class ProfileSettings:
     smoothing: str
     ema_alpha: float
     min_votes: int
+    max_jump: float
 
 
 @dataclass(frozen=True)
@@ -171,6 +172,7 @@ def _parse_profile(
             smoothing="ema",
             ema_alpha=0.35,
             min_votes=default_votes,
+            max_jump=0.0,
         )
 
     coord3d = bool(raw_profile.get("coord3d", True))
@@ -192,6 +194,10 @@ def _parse_profile(
             f"profiles.{name}.min_votes must be in [1, runtime.queue_size]."
         )
 
+    max_jump = float(raw_profile.get("max_jump", 0.0))
+    if max_jump < 0.0:
+        raise ValueError(f"profiles.{name}.max_jump must be >= 0.")
+
     return ProfileSettings(
         name=name,
         mode=mode,
@@ -204,6 +210,7 @@ def _parse_profile(
         smoothing=smoothing,
         ema_alpha=ema_alpha,
         min_votes=min_votes,
+        max_jump=max_jump,
     )
 
 

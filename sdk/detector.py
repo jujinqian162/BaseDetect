@@ -95,6 +95,7 @@ class Detector:
             min_votes=selected.min_votes,
             smoothing=selected.smoothing,
             ema_alpha=selected.ema_alpha,
+            max_jump=selected.max_jump,
         )
 
         self._window.clear()
